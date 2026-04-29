@@ -38,13 +38,53 @@ corepack pnpm dev
 corepack pnpm build
 ```
 
+## Lint
+
+```powershell
+corepack pnpm lint
+```
+
+## Unit Test
+
+```powershell
+corepack pnpm test:unit
+```
+
 ## Smoke Test
 
 ```powershell
 corepack pnpm test:smoke
 ```
 
+## Smoke Test (full alias)
+
+```powershell
+corepack pnpm test:smoke:full
+```
+
+## Test (stable local/CI)
+
+```powershell
+corepack pnpm test
+```
+
+## Live Test (optional)
+
+```powershell
+corepack pnpm test:live <streamKey>
+```
+
+## Developer Workflow
+
+1. Run `corepack pnpm lint`.
+2. Run `corepack pnpm test:unit`.
+3. Run `corepack pnpm build`.
+4. Run `corepack pnpm test`.
+5. Update `baocao.md` for notable feature/fix changes.
+
 ## Notes
 
 - For Google Drive, app converts common share URL formats to direct download URL when possible.
 - If ffmpeg is missing, install ffmpeg and restart the app.
+- `test:smoke` runs full checks, including Google Drive decode (network-dependent).
+- `test` and `test:smoke:ci` skip the network-dependent Drive decode step.

@@ -9,8 +9,6 @@ import {
   ChevronLast,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  Circle,
   Cloud,
   History,
   CircleAlert,
@@ -37,37 +35,21 @@ import {
 import { type MouseEvent, useEffect, useMemo, useState } from "react";
 import { checkFfmpegStatus, pickLocalVideo, probeDriveLink, readChangelog, scanDriveFolder, startStreamJob, stopAllStreams, stopStreamJob } from "./api";
 import type { ChangelogEntry, StreamEvent, StreamJob } from "./types";
+import { getJobDriveUrls, uniqueDriveUrls, driveFileKey, hasDriveValue, parseDriveLinks, type DriveLibraryItem, type DriveMetadataStatus } from "./features/drive/drive-utils";
+import { appendDriveLinks, applyGroupToDriveLinks, markDriveMetadataPending, removeDriveLinkById, removeSelectedDriveLinks } from "./features/drive/actions";
+import { persistDriveLibrary, persistJobs, persistTheme, readDriveLibrary, readJobs, readTheme } from "./features/app/storage";
+import { findDueScheduledJob } from "./features/streams/scheduler";
+import { buildCancelledScheduleUpdate, buildScheduledUpdate, buildStoppedUpdate, validateStartJob } from "./features/streams/actions";
+import { filterConfigDriveRows, filterLibraryRows, filterQueueRows } from "./features/streams/selectors";
+import { useDriveMetadataScanner } from "./features/drive/useDriveMetadataScanner";
+import { now } from "./utils/time";
+import { SmartFilterDropdown, type DropdownOption } from "./components/SmartFilterDropdown";
+import { SourceBadge, StatusBadge } from "./components/StatusBadges";
 
 type Theme = "dark" | "light";
 type View = "streams" | "library";
-type DriveMetadataStatus = "pending" | "scanning" | "ready" | "partial" | "error";
-type DriveLibraryItem = {
-  id: string;
-  url: string;
-  name: string;
-  group: string;
-  duration: string;
-  resolution: string;
-  size: string;
-  addedAt: string;
-  metadataStatus: DriveMetadataStatus;
-  metadataMessage?: string;
-  metadataChecked?: boolean;
-};
-type DropdownOption = {
-  value: string;
-  label: string;
-  tone?: "neutral" | "local" | "drive" | "idle" | "running" | "scheduled" | "failed";
-};
 
-const THEME_KEY = "yt-multistream-theme";
-const JOBS_KEY = "yt-multistream-jobs";
-const DRIVE_LIBRARY_KEY = "yt-multistream-drive-library";
 const TABLE_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-const DEFAULT_DRIVE_LINKS = [
-  "https://drive.google.com/file/d/19rBPbzba2CMVrr55vfgecI7OEb4v7GF_/view?usp=drive_link",
-  "https://drive.google.com/file/d/1ei4fSYgL0x-Z_PZ6DwDbnMwIOoaRlHDH/view?usp=drive_link"
-];
 const TOOL_GUIDE_SECTIONS = [
   {
     icon: Tv,
@@ -131,295 +113,7 @@ const VERSION_LOG_FALLBACK: ChangelogEntry[] = [
   }
 ];
 
-function now() {
-  return new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-function uniqueDriveUrls(urls: string[]) {
-  const seen = new Set<string>();
-  return urls
-    .map((url) => String(url || "").trim())
-    .filter((url) => /^https:\/\/drive\.google\.com\//i.test(url))
-    .filter((url) => {
-      const key = driveFileKey(url);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}
-
-function getJobDriveUrls(job?: Partial<StreamJob>) {
-  if (!job) return [];
-  return uniqueDriveUrls([...(Array.isArray(job.driveUrls) ? job.driveUrls : []), job.driveUrl || ""]);
-}
-
-function driveFileKey(value: string) {
-  const url = String(value || "").trim();
-  const fileId = url.match(/\/file\/d\/([^/?#]+)/i)?.[1] || url.match(/[?&]id=([^&#]+)/i)?.[1] || "";
-  return fileId || url;
-}
-
-function defaultJobs(): StreamJob[] {
-  return [
-    {
-      id: crypto.randomUUID(),
-      channelName: "Channel A",
-      sourceType: "local",
-      localPath: "",
-      driveUrl: "",
-      driveUrls: [],
-      drivePlayMode: "sequential",
-      driveLastIndex: 0,
-      rtmpBase: "rtmp://a.rtmp.youtube.com/live2",
-      primaryRtmpUrl: "",
-      backupRtmpUrl: "rtmp://b.rtmp.youtube.com/live2?backup=1",
-      streamKey: "",
-      status: "idle",
-      scheduledAt: "",
-      lastMessage: "Ready",
-      updatedAt: now()
-    }
-  ];
-}
-
-function readTheme(): Theme {
-  return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
-}
-
-function readJobs(): StreamJob[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(JOBS_KEY) || "[]") as StreamJob[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return defaultJobs();
-    return parsed.map((item, index) => ({
-      id: item.id || crypto.randomUUID(),
-      channelName: item.channelName || `Channel ${index + 1}`,
-      sourceType: item.sourceType === "drive" ? "drive" : "local",
-      localPath: item.localPath || "",
-      driveUrl: item.driveUrl || "",
-      driveUrls: getJobDriveUrls(item),
-      drivePlayMode: item.drivePlayMode === "random" ? "random" : "sequential",
-      driveLastIndex: Number.isFinite(item.driveLastIndex) ? item.driveLastIndex : 0,
-      rtmpBase: item.rtmpBase || "rtmp://a.rtmp.youtube.com/live2",
-      primaryRtmpUrl: item.primaryRtmpUrl || "",
-      backupRtmpUrl: item.backupRtmpUrl || "rtmp://b.rtmp.youtube.com/live2?backup=1",
-      streamKey: item.streamKey || "",
-      status: item.status === "scheduled" || item.status === "running" || item.status === "failed" || item.status === "idle" ? item.status : "idle",
-      scheduledAt: item.scheduledAt || "",
-      lastMessage: item.lastMessage || "Ready",
-      updatedAt: item.updatedAt || now()
-    }));
-  } catch {
-    return defaultJobs();
-  }
-}
-
-function hasDriveValue(value: string) {
-  const normalized = String(value || "").trim();
-  return normalized !== "" && normalized !== "-" && normalized.toLowerCase() !== "auto";
-}
-
-function deriveMetadataStatus(item: Partial<DriveLibraryItem>): DriveMetadataStatus {
-  const hasName = Boolean(item.name && item.name !== "Drive video" && !/^Drive video \d+$/i.test(item.name));
-  const hasDuration = hasDriveValue(item.duration || "");
-  const hasResolution = hasDriveValue(item.resolution || "");
-  const hasSize = hasDriveValue(item.size || "");
-  const explicitStatus = item.metadataStatus;
-  if (explicitStatus === "scanning" && (hasName || hasDuration || hasResolution || hasSize)) {
-    return hasDuration && hasResolution ? "ready" : "partial";
-  }
-  if (explicitStatus === "pending" || explicitStatus === "scanning") return "pending";
-  if ((explicitStatus === "ready" || explicitStatus === "partial") && (hasName || hasDuration || hasResolution || hasSize)) return explicitStatus;
-  if (explicitStatus === "error" && (hasName || hasDuration || hasResolution || hasSize)) return "partial";
-  if (explicitStatus === "error") return "pending";
-  if (hasDuration && hasResolution) return "ready";
-  if (hasName || hasDuration || hasResolution || hasSize) return "partial";
-  return item.metadataChecked ? "error" : "pending";
-}
-
-function readDriveLibrary(): DriveLibraryItem[] {
-  const defaultLibrary = () =>
-    DEFAULT_DRIVE_LINKS.map((url, index) => ({
-      id: `default-drive-${index + 1}`,
-      url,
-      name: `Drive video ${index + 1}`,
-      group: "Default",
-      duration: "-",
-      resolution: "-",
-      size: "-",
-      addedAt: new Date().toLocaleDateString("en-GB"),
-      metadataStatus: "pending" as DriveMetadataStatus,
-      metadataMessage: "Waiting for metadata scan.",
-      metadataChecked: false
-    }));
-
-  try {
-    const parsed = JSON.parse(localStorage.getItem(DRIVE_LIBRARY_KEY) || "[]") as Array<string | Partial<DriveLibraryItem>>;
-    if (!Array.isArray(parsed)) return defaultLibrary();
-    const items = parsed
-      .map((item) => {
-        if (typeof item === "string") {
-          const url = item.trim();
-          if (!url) return null;
-          return {
-            id: crypto.randomUUID(),
-            url,
-            name: "Drive video",
-            group: "Ungrouped",
-            duration: "-",
-            resolution: "-",
-            size: "-",
-            addedAt: new Date().toLocaleDateString("en-GB"),
-            metadataStatus: "pending",
-            metadataMessage: "Waiting for metadata scan.",
-            metadataChecked: false
-          };
-        }
-        const url = String(item.url || "").trim();
-        if (!url) return null;
-        const normalizedItem = {
-          ...item,
-          duration: String(item.duration || "-"),
-          resolution: String(item.resolution || "-"),
-          size: String(item.size || "-")
-        };
-        return {
-          id: String(item.id || crypto.randomUUID()),
-          url,
-          name: String(item.name || "Drive video"),
-          group: String(item.group || "Ungrouped"),
-          duration: normalizedItem.duration,
-          resolution: normalizedItem.resolution,
-          size: normalizedItem.size,
-          addedAt: String(item.addedAt || new Date().toLocaleDateString("en-GB")),
-          metadataStatus: deriveMetadataStatus(normalizedItem),
-          metadataMessage: String(item.metadataMessage || ""),
-          metadataChecked: Boolean(item.metadataChecked)
-        };
-      })
-      .filter(Boolean) as DriveLibraryItem[];
-    const existingByUrl = new Map(items.map((item) => [item.url, item]));
-    const seededItems = defaultLibrary().map((item) => existingByUrl.get(item.url) || item);
-    const seededUrls = new Set(seededItems.map((item) => item.url));
-    return [...seededItems, ...items.filter((item) => !seededUrls.has(item.url))];
-  } catch {
-    return defaultLibrary();
-  }
-}
-
 type LogLine = { id: string; time: string; level: "info" | "success" | "error"; message: string };
-
-function DropdownOptionMarker({ tone }: { tone?: DropdownOption["tone"] }) {
-  if (!tone || tone === "neutral") return null;
-  if (tone === "idle") return <CircleCheckBig size={13} className={`dropdown-option-icon ${tone}`} />;
-  if (tone === "running") return <Play size={13} className={`dropdown-option-icon ${tone}`} />;
-  if (tone === "scheduled") return <CalendarClock size={13} className={`dropdown-option-icon ${tone}`} />;
-  if (tone === "failed") return <X size={13} className={`dropdown-option-icon ${tone}`} />;
-  if (tone === "local") return <FolderOpen size={13} className={`dropdown-option-icon ${tone}`} />;
-  if (tone === "drive") return <Cloud size={13} className={`dropdown-option-icon ${tone}`} />;
-  return null;
-}
-
-function SmartFilterDropdown({
-  value,
-  options,
-  label,
-  searchLabel,
-  onChange
-}: {
-  value: string;
-  options: DropdownOption[];
-  label: string;
-  searchLabel: string;
-  onChange: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const filteredOptions = options.filter((option) => option.label.toLowerCase().includes(search.trim().toLowerCase()));
-  const selected = options.find((option) => option.value === value);
-
-  return (
-    <div
-      className={open ? "smart-dropdown open" : "smart-dropdown"}
-      onBlur={(event) => {
-        if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) {
-          setOpen(false);
-          setSearch("");
-        }
-      }}
-    >
-      <button type="button" className="smart-dropdown-trigger" onClick={() => setOpen((current) => !current)}>
-        <span className={selected?.tone ? `dropdown-trigger-label ${selected.tone}` : "dropdown-trigger-label"}>
-          <DropdownOptionMarker tone={selected?.tone} />
-          {selected?.label || label}
-        </span>
-        <ChevronDown size={15} className="dropdown-chevron" />
-      </button>
-      {open && (
-        <div className="smart-dropdown-menu">
-          <label className="smart-dropdown-search">
-            <Search size={15} />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={searchLabel} autoFocus />
-          </label>
-          <div className="smart-dropdown-options">
-            {filteredOptions.map((option) => {
-              return (
-              <button
-                type="button"
-                className={value === option.value ? "smart-dropdown-option active" : "smart-dropdown-option"}
-                key={option.value}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                  setSearch("");
-                }}
-              >
-                <span className="dropdown-checkbox">{value === option.value ? <Check size={10} /> : null}</span>
-                <span className={option.tone ? `dropdown-option-label ${option.tone}` : "dropdown-option-label"}>
-                  <DropdownOptionMarker tone={option.tone} />
-                  {option.label}
-                </span>
-              </button>
-              );
-            })}
-            {filteredOptions.length === 0 && <span className="dropdown-empty">No matches</span>}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SourceBadge({ sourceType }: { sourceType: StreamJob["sourceType"] }) {
-  const isDrive = sourceType === "drive";
-  return (
-    <span className={isDrive ? "source-badge drive" : "source-badge local"}>
-      {isDrive ? <Cloud size={12} /> : <FolderOpen size={12} />}
-      {isDrive ? "Google Drive" : "Local"}
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status: StreamJob["status"] }) {
-  const label = status === "idle" ? "Ready" : status === "scheduled" ? "Schedule" : status;
-
-  return (
-    <span className={`status-pill ${status}`}>
-      {status === "idle" ? (
-        <CircleCheckBig size={12} className="status-icon" />
-      ) : status === "running" ? (
-        <Play size={12} className="status-icon" />
-      ) : status === "scheduled" ? (
-        <CalendarClock size={12} className="status-icon" />
-      ) : status === "failed" ? (
-        <X size={12} className="status-icon" />
-      ) : (
-        <Circle size={10} className="status-icon" />
-      )}
-      {label}
-    </span>
-  );
-}
 
 export function App() {
   const [view, setView] = useState<View>("streams");
@@ -448,7 +142,7 @@ export function App() {
   const [librarySearch, setLibrarySearch] = useState("");
   const [libraryGroupFilter, setLibraryGroupFilter] = useState("all");
   const [libraryResolutionFilter, setLibraryResolutionFilter] = useState("all");
-  const [libraryDurationFilter, setLibraryDurationFilter] = useState("all");
+  const [libraryDurationFilter] = useState("all");
   const [configDriveSearch, setConfigDriveSearch] = useState("");
   const [configDriveGroupFilter, setConfigDriveGroupFilter] = useState("all");
   const [queuePage, setQueuePage] = useState(1);
@@ -467,15 +161,7 @@ export function App() {
   const scheduledCount = jobs.filter((job) => job.status === "scheduled").length;
   const failedCount = jobs.filter((job) => job.status === "failed").length;
   const readyCount = jobs.filter((job) => job.status === "idle").length;
-  const queueRows = useMemo(() => {
-    const term = queueSearch.trim().toLowerCase();
-    return jobs.filter((job) => {
-      const matchesTerm = !term || job.channelName.toLowerCase().includes(term) || job.lastMessage.toLowerCase().includes(term);
-      const matchesStatus = queueStatusFilter === "all" || job.status === queueStatusFilter;
-      const matchesSource = queueSourceFilter === "all" || job.sourceType === queueSourceFilter;
-      return matchesTerm && matchesStatus && matchesSource;
-    });
-  }, [jobs, queueSearch, queueSourceFilter, queueStatusFilter]);
+  const queueRows = useMemo(() => filterQueueRows(jobs, queueSearch, queueStatusFilter, queueSourceFilter), [jobs, queueSearch, queueSourceFilter, queueStatusFilter]);
   const queueTotalPages = Math.max(1, Math.ceil(queueRows.length / queuePageSize));
   const queuePageStart = (queuePage - 1) * queuePageSize;
   const queuePageEnd = Math.min(queuePageStart + queuePageSize, queueRows.length);
@@ -488,69 +174,28 @@ export function App() {
     () => Array.from(new Set(driveLibrary.map((item) => item.group).filter((value) => value && value !== "-"))),
     [driveLibrary]
   );
-  const libraryRows = useMemo(() => {
-    const term = librarySearch.trim().toLowerCase();
-    return driveLibrary.filter((item) => {
-      const matchesTerm =
-        !term ||
-        item.name.toLowerCase().includes(term) ||
-        item.url.toLowerCase().includes(term) ||
-        item.group.toLowerCase().includes(term) ||
-        item.duration.toLowerCase().includes(term) ||
-        item.resolution.toLowerCase().includes(term) ||
-        item.size.toLowerCase().includes(term) ||
-        item.metadataStatus.toLowerCase().includes(term) ||
-        item.addedAt.toLowerCase().includes(term);
-      const matchesGroup = libraryGroupFilter === "all" || item.group === libraryGroupFilter;
-      const matchesResolution = libraryResolutionFilter === "all" || item.resolution === libraryResolutionFilter;
-      const matchesDuration =
-        libraryDurationFilter === "all" ||
-        (libraryDurationFilter === "short" && /^0{0,1}0:/.test(item.duration)) ||
-        (libraryDurationFilter === "medium" && /^0{0,1}[1-2]:/.test(item.duration)) ||
-        (libraryDurationFilter === "long" && !/^0{0,1}[0-2]:/.test(item.duration));
-      return matchesTerm && matchesGroup && matchesResolution && matchesDuration;
-    });
-  }, [driveLibrary, libraryDurationFilter, libraryGroupFilter, libraryResolutionFilter, librarySearch]);
+  const libraryRows = useMemo(
+    () => filterLibraryRows(driveLibrary, librarySearch, libraryGroupFilter, libraryResolutionFilter, libraryDurationFilter),
+    [driveLibrary, libraryDurationFilter, libraryGroupFilter, libraryResolutionFilter, librarySearch]
+  );
   const libraryTotalPages = Math.max(1, Math.ceil(libraryRows.length / libraryPageSize));
   const libraryPageStart = (libraryPage - 1) * libraryPageSize;
   const libraryPageEnd = Math.min(libraryPageStart + libraryPageSize, libraryRows.length);
   const libraryPagedRows = libraryRows.slice(libraryPageStart, libraryPageEnd);
-  const configDriveRows = useMemo(() => {
-    const term = configDriveSearch.trim().toLowerCase();
-    return driveLibrary.filter((item) => {
-      const matchesTerm =
-        !term ||
-        item.name.toLowerCase().includes(term) ||
-        item.group.toLowerCase().includes(term) ||
-        item.url.toLowerCase().includes(term) ||
-        item.duration.toLowerCase().includes(term) ||
-        item.resolution.toLowerCase().includes(term) ||
-        item.size.toLowerCase().includes(term);
-      const matchesGroup = configDriveGroupFilter === "all" || item.group === configDriveGroupFilter;
-      return matchesTerm && matchesGroup;
-    });
-  }, [configDriveGroupFilter, configDriveSearch, driveLibrary]);
-  const selectedDriveLibraryItem = selectedJob?.driveUrl.trim()
-    ? driveLibrary.find((item) => driveFileKey(item.url) === driveFileKey(selectedJob.driveUrl))
-    : undefined;
-  const canAddSelectedDriveUrl = Boolean(
-    selectedJob?.driveUrl.trim() &&
-      /^https:\/\/drive\.google\.com\//i.test(selectedJob.driveUrl.trim()) &&
-      !selectedDriveLibraryItem
-  );
+  const configDriveRows = useMemo(() => filterConfigDriveRows(driveLibrary, configDriveSearch, configDriveGroupFilter), [configDriveGroupFilter, configDriveSearch, driveLibrary]);
   const metadataReadyCount = driveLibrary.filter((item) => item.metadataStatus === "ready" || item.metadataStatus === "partial").length;
   const selectedLibraryCount = selectedDriveIds.size;
 
   useEffect(() => {
-    localStorage.setItem(THEME_KEY, theme);
+    persistTheme(theme);
   }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem(JOBS_KEY, JSON.stringify(jobs));
+    persistJobs(jobs);
   }, [jobs]);
 
   useEffect(() => {
-    localStorage.setItem(DRIVE_LIBRARY_KEY, JSON.stringify(driveLibrary));
+    persistDriveLibrary(driveLibrary);
   }, [driveLibrary]);
 
   useEffect(() => {
@@ -625,76 +270,25 @@ export function App() {
   useEffect(() => {
     if (busy || ffmpegStatus !== "ok") return;
     const timer = window.setInterval(() => {
-      const dueJob = jobs.find((job) => job.status === "scheduled" && job.scheduledAt && new Date(job.scheduledAt).getTime() <= Date.now());
+      const dueJob = findDueScheduledJob(jobs);
       if (dueJob) {
         addLog("info", `Scheduled start triggered for ${dueJob.channelName}`);
         void startOne(dueJob);
       }
     }, 1000);
     return () => window.clearInterval(timer);
+  // startOne is intentionally omitted to avoid resetting this scheduler on each render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busy, ffmpegStatus, jobs]);
 
-  useEffect(() => {
-    if (typeof window.streaming?.probeDriveLink !== "function") {
-      setError("Drive metadata scanner is not available. Restart the Electron app so preload/main process can load the latest code.");
-      return;
-    }
-    const item = driveLibrary.find(
-      (entry) =>
-        !metadataLoadingIds.includes(entry.id) &&
-        entry.metadataStatus === "pending"
-    );
-    if (!item) return;
-    setMetadataLoadingIds((ids) => [...ids, item.id]);
-    setDriveLibrary((items) => items.map((entry) => (entry.id === item.id ? { ...entry, metadataStatus: "scanning", metadataMessage: "Reading Google Drive metadata..." } : entry)));
-    probeDriveLink(item.url)
-      .then((metadata) => {
-        const duration = metadata.duration || item.duration;
-        const resolution = metadata.resolution || item.resolution;
-        const size = metadata.size || item.size;
-        const hasDuration = hasDriveValue(duration);
-        const hasResolution = hasDriveValue(resolution);
-        const hasSize = hasDriveValue(size);
-        const hasName = Boolean(metadata.name && metadata.name !== "Drive video");
-        const metadataStatus: DriveMetadataStatus = hasDuration && hasResolution ? "ready" : hasName || hasDuration || hasResolution || hasSize ? "partial" : "error";
-        setDriveLibrary((items) =>
-          items.map((entry) =>
-            entry.id === item.id
-              ? {
-                  ...entry,
-                  name: metadata.name || entry.name,
-                  duration: duration === "Auto" ? "-" : duration,
-                  resolution: resolution === "Auto" ? "-" : resolution,
-                  size: size === "Auto" ? "-" : size,
-                  metadataStatus,
-                  metadataMessage: metadata.message || (metadataStatus === "ready" ? "Metadata generated." : "Only partial metadata was available."),
-                  metadataChecked: true
-                }
-              : entry
-          )
-        );
-      })
-      .catch(() => {
-        setDriveLibrary((items) =>
-          items.map((entry) =>
-            entry.id === item.id
-              ? {
-                  ...entry,
-                  duration: entry.duration === "Auto" ? "-" : entry.duration,
-                  resolution: entry.resolution === "Auto" ? "-" : entry.resolution,
-                  size: entry.size === "Auto" ? "-" : entry.size,
-                  metadataStatus: "error",
-                  metadataMessage: "Could not read metadata. Check that the Drive file is public and direct-downloadable.",
-                  metadataChecked: true
-                }
-              : entry
-          )
-        );
-      })
-      .finally(() => {
-        setMetadataLoadingIds((ids) => ids.filter((id) => id !== item.id));
-      });
-  }, [driveLibrary, metadataLoadingIds]);
+  useDriveMetadataScanner({
+    driveLibrary,
+    metadataLoadingIds,
+    setMetadataLoadingIds,
+    setDriveLibrary,
+    setError,
+    probeDriveLink
+  });
 
   function addLog(level: LogLine["level"], message: string) {
     setLogs((items) => [{ id: crypto.randomUUID(), time: now(), level, message }, ...items].slice(0, 300));
@@ -769,11 +363,9 @@ export function App() {
     setBusy(true);
     setError("");
     try {
-      const hasPrimary = job.primaryRtmpUrl.trim() || (job.rtmpBase.trim() && job.streamKey.trim());
       const driveUrls = getJobDriveUrls(job);
-      if (!hasPrimary) throw new Error(`Missing primary output for ${job.channelName}`);
-      if (job.sourceType === "local" && !job.localPath.trim()) throw new Error(`Missing local file for ${job.channelName}`);
-      if (job.sourceType === "drive" && driveUrls.length === 0) throw new Error(`Missing Google Drive URL for ${job.channelName}`);
+      const validationError = validateStartJob(job, driveUrls);
+      if (validationError) throw new Error(validationError);
       await startStreamJob(job);
       setJobs((items) => items.map((item) => (item.id === job.id ? { ...item, scheduledAt: "" } : item)));
     } catch (startError) {
@@ -789,7 +381,7 @@ export function App() {
   async function stopOne(jobId: string) {
     try {
       await stopStreamJob(jobId);
-      setJobs((items) => items.map((item) => (item.id === jobId ? { ...item, status: "idle", scheduledAt: "", lastMessage: "Stopped", updatedAt: now() } : item)));
+      setJobs((items) => items.map((item) => (item.id === jobId ? { ...item, ...buildStoppedUpdate("Stopped") } : item)));
     } catch (stopError) {
       addLog("error", stopError instanceof Error ? stopError.message : "Unable to stop stream.");
     }
@@ -801,7 +393,7 @@ export function App() {
 
   async function stopAll() {
     await stopAllStreams();
-    setJobs((items) => items.map((item) => ({ ...item, status: "idle", scheduledAt: "", lastMessage: "Stopped all", updatedAt: now() })));
+    setJobs((items) => items.map((item) => ({ ...item, ...buildStoppedUpdate("Stopped all") })));
     addLog("info", "All streams stopped");
   }
 
@@ -829,91 +421,24 @@ export function App() {
       return;
     }
     setError("");
-    updateSelectedJob({
-      status: "scheduled",
-      lastMessage: `Scheduled for ${new Date(selectedJob.scheduledAt).toLocaleString()}`,
-      updatedAt: now()
-    });
+    updateSelectedJob(buildScheduledUpdate(selectedJob.scheduledAt));
     addLog("info", `${selectedJob.channelName} scheduled for ${new Date(selectedJob.scheduledAt).toLocaleString()}`);
   }
 
   function cancelSelectedSchedule() {
     if (!selectedJob) return;
-    updateSelectedJob({
-      status: "idle",
-      scheduledAt: "",
-      lastMessage: "Schedule cancelled",
-      updatedAt: now()
-    });
+    updateSelectedJob(buildCancelledScheduleUpdate());
     addLog("info", `${selectedJob.channelName} schedule cancelled`);
   }
 
 
-  function parseDriveLinks(value: string) {
-    return Array.from(new Set(value.split(/[\n,;\s]+/).map((item) => item.trim()).filter((item) => /^https:\/\/drive\.google\.com\//i.test(item))));
-  }
-
   function addDriveLinks(urls = parseDriveLinks(driveDraft)) {
     if (urls.length === 0) return;
-    setDriveLibrary((items) => {
-      const existingUrls = new Set(items.map((item) => driveFileKey(item.url)));
-      const group = driveGroupDraft.trim() || "Ungrouped";
-      const seenUrls = new Set(existingUrls);
-      const nextItems = urls
-        .filter((url) => {
-          const key = driveFileKey(url);
-          if (seenUrls.has(key)) return false;
-          seenUrls.add(key);
-          return true;
-        })
-        .map((url) => ({
-          id: crypto.randomUUID(),
-          url,
-          name: "Drive video",
-          group,
-          duration: "Auto",
-          resolution: "Auto",
-          size: "Auto",
-          addedAt: new Date().toLocaleDateString("en-GB"),
-          metadataStatus: "pending" as DriveMetadataStatus,
-          metadataMessage: "Waiting for metadata scan.",
-          metadataChecked: false
-        }));
-      return [...nextItems, ...items].slice(0, 200);
-    });
+    setDriveLibrary((items) => appendDriveLinks(items, urls, driveGroupDraft));
     setDriveDraft("");
     setDriveGroupDraft("Default");
     setDriveFolderDraft("");
     setDriveModalOpen(false);
-  }
-
-  function addCurrentDriveUrlToLibrary() {
-    const url = selectedJob?.driveUrl.trim() || "";
-    if (!url || !/^https:\/\/drive\.google\.com\//i.test(url)) {
-      setError("Enter a valid Google Drive URL first.");
-      return;
-    }
-    if (driveLibrary.some((item) => driveFileKey(item.url) === driveFileKey(url))) return;
-    const group = configDriveGroupFilter !== "all" ? configDriveGroupFilter : driveGroupDraft.trim() || "Default";
-    setDriveLibrary((items) => [
-      {
-        id: crypto.randomUUID(),
-        url,
-        name: "Drive video",
-        group,
-        duration: "Auto",
-        resolution: "Auto",
-        size: "Auto",
-        addedAt: new Date().toLocaleDateString("en-GB"),
-        metadataStatus: "pending" as DriveMetadataStatus,
-        metadataMessage: "Waiting for metadata scan.",
-        metadataChecked: false
-      },
-      ...items
-    ]);
-    setSelectedDriveId("");
-    updateSelectedDriveUrls([...selectedJobDriveUrls, url]);
-    setError("");
   }
 
   function applyDriveLibraryItem(item: DriveLibraryItem, rowIndex: number, event?: MouseEvent<HTMLTableRowElement>) {
@@ -959,7 +484,7 @@ export function App() {
   }
 
   function removeDriveLink(id: string) {
-    setDriveLibrary((items) => items.filter((item) => item.id !== id));
+    setDriveLibrary((items) => removeDriveLinkById(items, id));
     if (selectedDriveId === id) setSelectedDriveId("");
     setSelectedDriveIds((ids) => {
       const next = new Set(ids);
@@ -970,7 +495,7 @@ export function App() {
 
   function removeSelectedDriveLink() {
     if (selectedDriveIds.size === 0) return;
-    setDriveLibrary((items) => items.filter((item) => !selectedDriveIds.has(item.id)));
+    setDriveLibrary((items) => removeSelectedDriveLinks(items, selectedDriveIds));
     setSelectedDriveId("");
     setSelectedDriveIds(new Set());
   }
@@ -978,7 +503,7 @@ export function App() {
   function applyGroupToSelectedDriveLinks() {
     const group = bulkGroupDraft.trim();
     if (!group || selectedDriveIds.size === 0) return;
-    setDriveLibrary((items) => items.map((item) => (selectedDriveIds.has(item.id) ? { ...item, group } : item)));
+    setDriveLibrary((items) => applyGroupToDriveLinks(items, selectedDriveIds, group));
   }
 
   function handleLibraryRowSelection(itemId: string, rowIndex: number, event?: MouseEvent<HTMLTableRowElement>) {
@@ -1025,35 +550,11 @@ export function App() {
   }
 
   function refreshDriveMetadata(id: string) {
-    setDriveLibrary((items) =>
-      items.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              duration: hasDriveValue(item.duration) ? item.duration : "Auto",
-              resolution: hasDriveValue(item.resolution) ? item.resolution : "Auto",
-              size: hasDriveValue(item.size) ? item.size : "Auto",
-              metadataStatus: "pending",
-              metadataMessage: "Waiting for metadata scan.",
-              metadataChecked: false
-            }
-          : item
-      )
-    );
+    setDriveLibrary((items) => items.map((item) => (item.id === id ? markDriveMetadataPending(item) : item)));
   }
 
   function refreshAllDriveMetadata() {
-    setDriveLibrary((items) =>
-      items.map((item) => ({
-        ...item,
-        duration: hasDriveValue(item.duration) ? item.duration : "Auto",
-        resolution: hasDriveValue(item.resolution) ? item.resolution : "Auto",
-        size: hasDriveValue(item.size) ? item.size : "Auto",
-        metadataStatus: "pending",
-        metadataMessage: "Waiting for metadata scan.",
-        metadataChecked: false
-      }))
-    );
+    setDriveLibrary((items) => items.map((item) => markDriveMetadataPending(item)));
   }
 
   function metadataStatusLabel(status: DriveMetadataStatus) {
@@ -1101,13 +602,6 @@ export function App() {
     { value: "all", label: "All groups" },
     ...libraryGroupOptions.map((group) => ({ value: group, label: group }))
   ];
-  const libraryDurationOptions: DropdownOption[] = [
-    { value: "all", label: "All durations" },
-    { value: "short", label: "Short (< 10m)" },
-    { value: "medium", label: "Medium (10m - 29m)" },
-    { value: "long", label: "Long (30m+)" }
-  ];
-
   return (
     <div className={`shell theme-${theme}`}>
       <aside className="sidebar">

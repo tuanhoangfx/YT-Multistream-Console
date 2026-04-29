@@ -8,6 +8,7 @@ const ffmpegPath = ffmpegInstaller.path;
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "yt-multistream-smoke-"));
 const samplePath = path.join(tempDir, "sample.mp4");
 const driveUrl = "https://drive.google.com/uc?export=download&id=1jMQ6HIUvWHVPb_WLQQXQNZ4J2dbW3vze";
+const skipDriveCheck = process.env.SKIP_DRIVE_CHECK === "1";
 
 function runStep(name, args) {
   process.stdout.write(`\n[step] ${name}\n`);
@@ -70,7 +71,11 @@ try {
     "[f=null:onfail=ignore]NUL|[f=null:onfail=ignore]NUL"
   ]);
 
-  runStep("decode Google Drive source", ["-v", "error", "-t", "5", "-i", driveUrl, "-f", "null", "-"]);
+  if (skipDriveCheck) {
+    process.stdout.write("[skip] decode Google Drive source (SKIP_DRIVE_CHECK=1)\n");
+  } else {
+    runStep("decode Google Drive source", ["-v", "error", "-t", "5", "-i", driveUrl, "-f", "null", "-"]);
+  }
 
   process.stdout.write("\n[done] smoke test passed.\n");
 } catch (error) {
