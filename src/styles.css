@@ -1963,6 +1963,19 @@ select:focus {
   font-weight: 820;
 }
 
+.version-log-timestamp {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--muted);
+  background: var(--surface-3);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .version-log-title h3 {
   margin: 0;
 }

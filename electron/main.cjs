@@ -335,29 +335,35 @@ function runFfmpegMetadataProbe(input, cookie) {
 
 function parseChangelogSections(markdown) {
   const source = String(markdown || "");
-  const lines = source.split(/\r?\n/);
+  const sections = source.split(/\r?\n(?=## )/g);
   const entries = [];
-  let current = null;
-  for (const rawLine of lines) {
-    const line = String(rawLine || "");
-    const headingMatch = line.match(/^##\s+(.+?)\s*$/);
-    if (headingMatch) {
-      if (current && current.items.length > 0) entries.push(current);
-      const heading = headingMatch[1].trim();
-      const parts = heading.split(/\s+-\s+/);
-      const version = parts[0] || heading;
-      const title = parts.slice(1).join(" - ") || heading;
-      current = { version, title, items: [] };
-      continue;
-    }
-    if (!current) continue;
-    const bulletMatch = line.match(/^\s*-\s+(.+?)\s*$/);
-    if (bulletMatch) {
-      current.items.push(bulletMatch[1].trim());
-    }
+  for (const section of sections) {
+    const headingMatch = section.match(/^##\s+(\d{4}-\d{2}-\d{2})\s+-\s+(.+)$/m);
+    if (!headingMatch) continue;
+    const date = headingMatch[1];
+    const title = headingMatch[2].trim();
+    const versionMatch = section.match(/^- Version:\s*`?([0-9]+\.[0-9]+\.[0-9]+)`?\s*$/m);
+    const timestampMatch = section.match(/^- Timestamp:\s*(.+)\s*$/m);
+    const releaseMatch = section.match(/^- Release:\s+.*\/tag\/v([0-9]+\.[0-9]+\.[0-9]+)\s*$/m);
+    const changesMatch = section.match(/### Changes\s*\r?\n([\s\S]*?)(?:\r?\n### |\s*$)/);
+    if (!changesMatch) continue;
+    const items = changesMatch[1]
+      .split(/\r?\n/)
+      .map((line) => String(line || "").trim())
+      .filter((line) => line.startsWith("- "))
+      .map((line) => line.slice(2).trim())
+      .filter(Boolean)
+      .slice(0, 5);
+    if (items.length === 0) continue;
+    entries.push({
+      version: (versionMatch && versionMatch[1]) || (releaseMatch && releaseMatch[1]) || date,
+      timestamp: (timestampMatch && timestampMatch[1] && timestampMatch[1].trim()) || `${date} 00:00`,
+      title,
+      items
+    });
+    if (entries.length >= 10) break;
   }
-  if (current && current.items.length > 0) entries.push(current);
-  return entries.slice(0, 10);
+  return entries;
 }
 
 function broadcast(event) {

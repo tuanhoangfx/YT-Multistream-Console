@@ -100,6 +100,7 @@ const TOOL_GUIDE_SECTIONS = [
 const VERSION_LOG_FALLBACK: ChangelogEntry[] = [
   {
     version: "2026-04-26",
+    timestamp: "2026-04-26 00:00",
     title: "Stability pass for direct streaming test",
     items: [
       "Bundled ffmpeg runtime so streams run without PATH-based ffmpeg setup.",
@@ -110,6 +111,7 @@ const VERSION_LOG_FALLBACK: ChangelogEntry[] = [
   },
   {
     version: "2026-04-26",
+    timestamp: "2026-04-26 00:00",
     title: "Initial multistream console baseline",
     items: [
       "Shipped Electron plus React desktop baseline for YT multistream operations.",
@@ -119,6 +121,7 @@ const VERSION_LOG_FALLBACK: ChangelogEntry[] = [
   },
   {
     version: "2026-04-28",
+    timestamp: "2026-04-28 00:00",
     title: "Guide and changelog design standardization",
     items: [
       "Aligned topbar Guide, Changelog, and Refresh controls with shared design standards.",
@@ -2109,6 +2112,7 @@ export function App() {
                           <EntryIcon size={15} />
                         </span>
                         <span className="version-log-version">{entry.version}</span>
+                        <span className="version-log-timestamp">{entry.timestamp}</span>
                         <h3>{entry.title}</h3>
                       </div>
                       <ul>

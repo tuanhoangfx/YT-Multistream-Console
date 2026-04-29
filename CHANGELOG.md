@@ -2,6 +2,9 @@
 
 ## 2026-04-28 - Project Manifest Identity
 
+- Version: `0.1.0`
+- Timestamp: 2026-04-28 18:47 (UTC+7)
+- Commit: pending
 - Type: Metadata/Governance
 - Status: Verified
 
@@ -18,10 +21,13 @@
 
 ## 2026-04-26 - Stability Pass For Direct Streaming Test
 
+- Version: `0.1.0`
+- Timestamp: 2026-04-26 19:20 (UTC+7)
+- Commit: pending
 - Type: Fix/Stability/UI
 - Status: Stable
 
-### Updated
+### Changes
 
 - Added bundled ffmpeg runtime (`@ffmpeg-installer/ffmpeg`) so streaming works without system PATH setup.
 - Added primary and backup RTMP output support with single ffmpeg process (`tee` muxer).
@@ -42,10 +48,13 @@
 
 ## 2026-04-26 - Initial Multistream Console Baseline
 
+- Version: `0.1.0`
+- Timestamp: 2026-04-26 18:30 (UTC+7)
+- Commit: pending
 - Type: Feature/Baseline
 - Status: Stable draft
 
-### Added
+### Changes
 
 - New Electron + React desktop tool: `YT Multistream Console`.
 - Multi-channel queue with per-channel config.

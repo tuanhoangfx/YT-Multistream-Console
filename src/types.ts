@@ -29,6 +29,7 @@ export type StreamEvent = {
 
 export type ChangelogEntry = {
   version: string;
+  timestamp: string;
   title: string;
   items: string[];
 };
