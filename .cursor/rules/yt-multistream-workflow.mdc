@@ -1,0 +1,15 @@
+---
+description: Persistent workflow and quality rules for YT Multistream Console
+alwaysApply: true
+---
+
+# YT Multistream Workflow Rule
+
+- Preserve operation-console UX: queue, config panel, runtime console, and clear stream states.
+- Keep feature work aligned to multistream lifecycle: setup -> run -> monitor -> recover.
+- Validate stream config before start: source + RTMP base + stream key.
+- Keep ffmpeg process management robust and avoid orphan workers.
+- Never expose full stream keys in logs or UI summaries.
+- Prefer modular architecture as code grows: UI, queue logic, IPC contracts, and process control.
+- For source parsing, keep Google Drive URL handling in a dedicated helper.
+- Run `corepack pnpm build` after substantive changes and report what was verified.

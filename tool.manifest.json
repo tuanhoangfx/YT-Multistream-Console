@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "code": "P0002",
+  "id": "yt-multistream-console",
+  "aliases": ["P0002", "YT", "YT Multistream", "YT Multistream Console"],
+  "name": "YT Multistream Console",
+  "type": "Desktop",
+  "owner": "Tool",
+  "status": "Ready",
+  "summary": "Local desktop console for running multi-channel YouTube livestream jobs from local video files or Google Drive links.",
+  "stack": ["Electron", "React", "Vite", "FFmpeg"],
+  "commands": {
+    "dev": "corepack pnpm dev",
+    "build": "corepack pnpm build",
+    "smoke": "corepack pnpm test:smoke",
+    "preview": "corepack pnpm preview"
+  },
+  "docs": {
+    "readme": "README.md",
+    "context": "PROJECT_CONTEXT.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "github": {
+    "repo": "tuanhoangfx/YT-Multistream-Console",
+    "branch": "main",
+    "manifestPath": "tool.manifest.json"
+  },
+  "release": {
+    "version": "0.1.0",
+    "readiness": ["build", "docs", "smoke-test", "stream-key-masking"]
+  },
+  "health": {
+    "status": "Ready",
+    "note": "Requires bundled FFmpeg and valid YouTube RTMP stream keys. Stream keys must stay masked in logs."
+  },
+  "nextActions": [
+    "Add stream profile templates for 720p, 1080p, and low bandwidth.",
+    "Add queue-level retry policy and auto-restart.",
+    "Persist run history in SQLite."
+  ]
+}
