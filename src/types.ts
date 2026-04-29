@@ -27,6 +27,12 @@ export type StreamEvent = {
   status?: JobStatus;
 };
 
+export type ChangelogEntry = {
+  version: string;
+  title: string;
+  items: string[];
+};
+
 declare global {
   interface Window {
     streaming: {
@@ -35,6 +41,7 @@ declare global {
       stopJob: (payload: Record<string, unknown>) => Promise<{ ok: boolean; stopped: boolean }>;
       stopAllJobs: () => Promise<{ ok: boolean; count: number }>;
       checkFfmpeg: () => Promise<{ ok: boolean; message: string }>;
+      readChangelog: () => Promise<{ ok: boolean; entries: ChangelogEntry[]; message?: string }>;
       scanDriveFolder: (payload: Record<string, unknown>) => Promise<{ ok: boolean; links: string[]; message: string }>;
       probeDriveLink: (payload: Record<string, unknown>) => Promise<{ ok: boolean; name: string; duration: string; resolution: string; size: string; message: string }>;
       onJobEvent: (handler: (event: StreamEvent) => void) => () => void;

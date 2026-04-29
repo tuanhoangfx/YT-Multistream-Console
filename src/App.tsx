@@ -35,8 +35,8 @@ import {
   Zap
 } from "lucide-react";
 import { type MouseEvent, useEffect, useMemo, useState } from "react";
-import { checkFfmpegStatus, pickLocalVideo, probeDriveLink, scanDriveFolder, startStreamJob, stopAllStreams, stopStreamJob } from "./api";
-import type { StreamEvent, StreamJob } from "./types";
+import { checkFfmpegStatus, pickLocalVideo, probeDriveLink, readChangelog, scanDriveFolder, startStreamJob, stopAllStreams, stopStreamJob } from "./api";
+import type { ChangelogEntry, StreamEvent, StreamJob } from "./types";
 
 type Theme = "dark" | "light";
 type View = "streams" | "library";
@@ -97,9 +97,8 @@ const TOOL_GUIDE_SECTIONS = [
     ]
   }
 ] as const;
-const VERSION_LOG_ENTRIES = [
+const VERSION_LOG_FALLBACK: ChangelogEntry[] = [
   {
-    icon: RefreshCw,
     version: "2026-04-26",
     title: "Stability pass for direct streaming test",
     items: [
@@ -110,7 +109,6 @@ const VERSION_LOG_ENTRIES = [
     ]
   },
   {
-    icon: CheckCircle2,
     version: "2026-04-26",
     title: "Initial multistream console baseline",
     items: [
@@ -120,7 +118,6 @@ const VERSION_LOG_ENTRIES = [
     ]
   },
   {
-    icon: BookOpen,
     version: "2026-04-28",
     title: "Guide and changelog design standardization",
     items: [
@@ -129,7 +126,7 @@ const VERSION_LOG_ENTRIES = [
       "Updated help content for YT-specific queue, runtime, and Drive source workflows."
     ]
   }
-] as const;
+];
 
 function now() {
   return new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -457,6 +454,7 @@ export function App() {
   const [libraryPageSize, setLibraryPageSize] = useState(20);
   const [showToolGuide, setShowToolGuide] = useState(false);
   const [showVersionLog, setShowVersionLog] = useState(false);
+  const [versionLogEntries, setVersionLogEntries] = useState<ChangelogEntry[]>(VERSION_LOG_FALLBACK);
   const [lastDrivePickIndex, setLastDrivePickIndex] = useState<number | null>(null);
 
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || jobs[0];
@@ -596,6 +594,18 @@ export function App() {
       .catch((checkError) => {
         setFfmpegStatus("missing");
         addLog("error", checkError instanceof Error ? checkError.message : "Unable to detect ffmpeg.");
+      });
+  }, []);
+
+  useEffect(() => {
+    readChangelog()
+      .then((result) => {
+        if (result.ok && Array.isArray(result.entries) && result.entries.length > 0) {
+          setVersionLogEntries(result.entries);
+        }
+      })
+      .catch(() => {
+        // Keep fallback list when changelog cannot be loaded.
       });
   }, []);
 
@@ -2090,10 +2100,10 @@ export function App() {
                 </button>
               </header>
               <div className="info-modal-body version-log-list">
-                {VERSION_LOG_ENTRIES.map((entry) => {
-                  const EntryIcon = entry.icon;
+                {versionLogEntries.map((entry, index) => {
+                  const EntryIcon = index % 3 === 0 ? RefreshCw : index % 3 === 1 ? CheckCircle2 : BookOpen;
                   return (
-                    <section className="info-section version-log-entry" key={entry.version}>
+                    <section className="info-section version-log-entry" key={`${entry.version}-${entry.title}`}>
                       <div className="version-log-title">
                         <span className="info-section-icon">
                           <EntryIcon size={15} />

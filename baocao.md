@@ -1,0 +1,4 @@
+ - **Ngay/Gio:** 2026-04-29 22:31:03
+ - **Tinh nang:** Tu dong doc Version Log tu CHANGELOG.md
+ - **Trang thai:** Lam moi hoan toan
+ - **Mo ta ngan gon:** Them IPC `changelog:read` tai `electron/main.cjs` va `electron/preload.cjs`; bo sung API/type tai `src/api.ts`, `src/types.ts`; cap nhat `src/App.tsx` de tai changelog runtime va fallback an toan khi loi.

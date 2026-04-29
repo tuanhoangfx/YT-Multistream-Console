@@ -333,6 +333,33 @@ function runFfmpegMetadataProbe(input, cookie) {
   });
 }
 
+function parseChangelogSections(markdown) {
+  const source = String(markdown || "");
+  const lines = source.split(/\r?\n/);
+  const entries = [];
+  let current = null;
+  for (const rawLine of lines) {
+    const line = String(rawLine || "");
+    const headingMatch = line.match(/^##\s+(.+?)\s*$/);
+    if (headingMatch) {
+      if (current && current.items.length > 0) entries.push(current);
+      const heading = headingMatch[1].trim();
+      const parts = heading.split(/\s+-\s+/);
+      const version = parts[0] || heading;
+      const title = parts.slice(1).join(" - ") || heading;
+      current = { version, title, items: [] };
+      continue;
+    }
+    if (!current) continue;
+    const bulletMatch = line.match(/^\s*-\s+(.+?)\s*$/);
+    if (bulletMatch) {
+      current.items.push(bulletMatch[1].trim());
+    }
+  }
+  if (current && current.items.length > 0) entries.push(current);
+  return entries.slice(0, 10);
+}
+
 function broadcast(event) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send("stream:job-event", event);
@@ -651,6 +678,21 @@ function bindStreamingApi() {
           ? `Partial metadata only. ffmpeg output: ${(media.debug || "").replace(/\s+/g, " ").slice(0, 220) || "no media stream details"}`
           : `Could not read media metadata. ffmpeg output: ${(media.debug || "").replace(/\s+/g, " ").slice(0, 220) || "empty"}`
     };
+  });
+
+  ipcMain.handle("changelog:read", async () => {
+    const changelogPath = path.join(__dirname, "..", "CHANGELOG.md");
+    try {
+      const content = await fs.readFile(changelogPath, "utf8");
+      const entries = parseChangelogSections(content);
+      return { ok: true, entries };
+    } catch (error) {
+      return {
+        ok: false,
+        entries: [],
+        message: error instanceof Error ? error.message : "Unable to read changelog."
+      };
+    }
   });
 }
 
