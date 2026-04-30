@@ -1,0 +1,55 @@
+name: Reusable Verify
+
+on:
+  workflow_call:
+    inputs:
+      run_smoke:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync metadata
+        run: pnpm sync:meta
+
+      - name: Ensure synced files are committed
+        run: git diff --exit-code -- tool.manifest.json TOOL_STATUS.md
+
+      - name: Verify changelog includes current version
+        run: pnpm check:changelog
+
+      - name: Cleanup audit
+        run: pnpm audit:cleanup
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Build
+        run: pnpm build
+
+      - name: Smoke test
+        if: ${{ inputs.run_smoke }}
+        run: pnpm test:smoke:ci

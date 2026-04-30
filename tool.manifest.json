@@ -13,12 +13,16 @@
     "dev": "corepack pnpm dev",
     "build": "corepack pnpm build",
     "smoke": "corepack pnpm test:smoke",
-    "preview": "corepack pnpm preview"
+    "preview": "corepack pnpm preview",
+    "package": "corepack pnpm dist"
   },
   "docs": {
     "readme": "README.md",
     "context": "PROJECT_CONTEXT.md",
-    "changelog": "CHANGELOG.md"
+    "changelog": "CHANGELOG.md",
+    "release": "RELEASE.md",
+    "architecture": "ARCHITECTURE.md",
+    "contributing": "CONTRIBUTING.md"
   },
   "github": {
     "repo": "tuanhoangfx/YT-Multistream-Console",

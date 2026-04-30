@@ -51,6 +51,17 @@ module.exports = tseslint.config(
     }
   },
   {
+    files: ["scripts/**/*.mjs"],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      sourceType: "module",
+      globals: {
+        process: "readonly",
+        console: "readonly"
+      }
+    }
+  },
+  {
     files: ["eslint.config.js"],
     extends: [js.configs.recommended],
     languageOptions: {

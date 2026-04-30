@@ -1,0 +1,43 @@
+name: Reusable Release
+
+on:
+  workflow_call:
+    inputs:
+      run_smoke:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify quality gates
+        run: |
+          pnpm lint
+          pnpm test:unit
+          pnpm build
+
+      - name: Smoke test
+        if: ${{ inputs.run_smoke }}
+        run: pnpm test:smoke:ci
+
+      - name: Package installer
+        run: pnpm dist

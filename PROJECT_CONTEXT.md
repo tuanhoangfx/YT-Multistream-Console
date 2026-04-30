@@ -48,4 +48,4 @@ The main operator workflow is:
 - Add scheduler (start at time, stop at time).
 - Add optional loop strategy per source list.
 - Persist run history in SQLite.
-- Package with `electron-builder`.
+- Package and release with `electron-builder` + GitHub Releases automation.

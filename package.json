@@ -3,7 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Desktop console for multi-channel YouTube livestream from local or Google Drive source.",
+  "author": "YT Multistream Console",
   "main": "electron/main.cjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tuanhoangfx/YT-Multistream-Console.git"
+  },
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1 --port 5174\" \"wait-on tcp:5174 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5174 electron .\"",
     "build": "tsc --noEmit && vite build",
@@ -17,6 +22,15 @@
     "test:smoke:ci": "cross-env SKIP_DRIVE_CHECK=1 pnpm test:smoke",
     "test:smoke:full": "pnpm test:smoke",
     "test:live": "node scripts/live-test.cjs",
+    "audit:cleanup": "node scripts/audit-cleanup.mjs",
+    "sync:bump": "node scripts/bump-patch-version.mjs",
+    "sync:changelog": "node scripts/sync-changelog.mjs",
+    "check:changelog": "node scripts/sync-changelog.mjs --check",
+    "sync:meta": "node scripts/sync-metadata-version.mjs",
+    "sync:all": "pnpm sync:bump && pnpm sync:meta && pnpm sync:changelog",
+    "pack": "corepack pnpm build && electron-builder --dir",
+    "dist": "corepack pnpm build && electron-builder --win nsis-web --publish never",
+    "release": "corepack pnpm build && electron-builder --win nsis-web --publish always",
     "preview": "vite preview --host 127.0.0.1 --port 5174",
     "start": "electron ."
   },
@@ -36,12 +50,46 @@
     "@eslint/js": "^10.0.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "electron-builder": "^26.8.1",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "prettier": "^3.8.3",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.59.1"
+    "typescript-eslint": "^8.59.1",
+    "vitest": "^4.1.5",
+    "jsdom": "^26.1.0"
+  },
+  "build": {
+    "appId": "com.yt.multistream-console",
+    "productName": "YT Multistream Console",
+    "artifactName": "YT-Multistream-Console-Setup-${version}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis-web"
+    },
+    "nsisWeb": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "tuanhoangfx",
+        "repo": "YT-Multistream-Console",
+        "releaseType": "release"
+      }
+    ]
   },
   "pnpm": {
     "onlyBuiltDependencies": [

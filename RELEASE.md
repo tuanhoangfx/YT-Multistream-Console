@@ -26,9 +26,22 @@ dist\assets\index-*.js
 dist\assets\index-*.css
 ```
 
-## Optional Desktop Packaging
+## Desktop Packaging
 
-If you add Electron Builder packaging later, keep the packaging scripts in `package.json` and document output paths here.
+Create installer artifacts with Electron Builder:
+
+```powershell
+cd E:\Dev\Tool\YT-Multistream-Console
+corepack pnpm dist
+```
+
+Expected packaging output:
+
+```text
+release\nsis-web\YT-Multistream-Console-Setup-<version>.exe
+release\nsis-web\yt-multistream-console-<version>-x64.nsis.7z
+release\nsis-web\latest.yml
+```
 
 ## Publish Checklist
 
