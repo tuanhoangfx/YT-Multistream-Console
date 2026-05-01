@@ -27,6 +27,7 @@ function defaultJobs(): StreamJob[] {
       backupRtmpUrl: "rtmp://b.rtmp.youtube.com/live2?backup=1",
       streamKey: "",
       status: "idle",
+      publishMode: "immediate",
       scheduledAt: "",
       lastMessage: "Ready",
       updatedAt: now()
@@ -56,6 +57,7 @@ export function readJobs(): StreamJob[] {
       backupRtmpUrl: item.backupRtmpUrl || "rtmp://b.rtmp.youtube.com/live2?backup=1",
       streamKey: item.streamKey || "",
       status: item.status === "scheduled" || item.status === "running" || item.status === "failed" || item.status === "idle" ? item.status : "idle",
+      publishMode: item.publishMode === "scheduled" ? "scheduled" : "immediate",
       scheduledAt: item.scheduledAt || "",
       lastMessage: item.lastMessage || "Ready",
       updatedAt: item.updatedAt || now()

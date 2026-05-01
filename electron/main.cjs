@@ -366,6 +366,25 @@ function parseChangelogSections(markdown) {
   return entries;
 }
 
+function parseSemver(value) {
+  const match = String(value || "").match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function compareSemver(a, b) {
+  const av = parseSemver(a);
+  const bv = parseSemver(b);
+  if (!av && !bv) return 0;
+  if (!av) return -1;
+  if (!bv) return 1;
+  for (let i = 0; i < 3; i += 1) {
+    if (av[i] > bv[i]) return 1;
+    if (av[i] < bv[i]) return -1;
+  }
+  return 0;
+}
+
 function broadcast(event) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send("stream:job-event", event);
@@ -686,19 +705,37 @@ function bindStreamingApi() {
     };
   });
 
-  ipcMain.handle("changelog:read", async () => {
-    const changelogPath = path.join(__dirname, "..", "CHANGELOG.md");
-    try {
-      const content = await fs.readFile(changelogPath, "utf8");
-      const entries = parseChangelogSections(content);
-      return { ok: true, entries };
-    } catch (error) {
-      return {
-        ok: false,
-        entries: [],
-        message: error instanceof Error ? error.message : "Unable to read changelog."
-      };
+  ipcMain.handle("release-log:read", async () => {
+    const candidates = [
+      path.join(__dirname, "..", "RELEASE.md"),
+      path.join(app.getAppPath(), "RELEASE.md"),
+      path.join(process.resourcesPath, "RELEASE.md")
+    ];
+    let bestEntries = [];
+    let bestVersion = "";
+    for (const candidate of candidates) {
+      try {
+        const content = await fs.readFile(candidate, "utf8");
+        const entries = parseChangelogSections(content);
+        if (entries.length > 0) {
+          const topVersion = String(entries[0]?.version || "");
+          if (bestEntries.length === 0 || compareSemver(topVersion, bestVersion) > 0) {
+            bestEntries = entries;
+            bestVersion = topVersion;
+          }
+        }
+      } catch {
+        // Try next candidate path.
+      }
     }
+    if (bestEntries.length > 0) {
+      return { ok: true, entries: bestEntries };
+    }
+    return {
+      ok: false,
+      entries: [],
+      message: "Unable to load release entries from RELEASE.md."
+    };
   });
 }
 

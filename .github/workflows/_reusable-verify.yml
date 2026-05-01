@@ -33,10 +33,10 @@ jobs:
         run: pnpm sync:meta
 
       - name: Ensure synced files are committed
-        run: git diff --exit-code -- tool.manifest.json TOOL_STATUS.md
+        run: git diff --exit-code -- tool.manifest.json
 
-      - name: Verify changelog includes current version
-        run: pnpm check:changelog
+      - name: Verify release log includes current version
+        run: pnpm check:releaselog
 
       - name: Cleanup audit
         run: pnpm audit:cleanup

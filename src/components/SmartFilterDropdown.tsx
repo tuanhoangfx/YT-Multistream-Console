@@ -1,14 +1,33 @@
-import { CalendarClock, Check, ChevronDown, CircleCheckBig, Cloud, FolderOpen, Play, Search, X } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, CircleCheckBig, Cloud, FolderOpen, ListFilter, Play, Search, X } from "lucide-react";
 import { useState } from "react";
 
 export type DropdownOption = {
   value: string;
   label: string;
-  tone?: "neutral" | "local" | "drive" | "idle" | "running" | "scheduled" | "failed";
+  tone?: "neutral" | "all" | "local" | "drive" | "idle" | "running" | "scheduled" | "failed";
 };
+
+type SmartFilterDropdownProps =
+  | {
+      value: string;
+      options: DropdownOption[];
+      label: string;
+      searchLabel: string;
+      multiple?: false;
+      onChange: (value: string) => void;
+    }
+  | {
+      value: string[];
+      options: DropdownOption[];
+      label: string;
+      searchLabel: string;
+      multiple: true;
+      onChange: (value: string[]) => void;
+    };
 
 function DropdownOptionMarker({ tone }: { tone?: DropdownOption["tone"] }) {
   if (!tone || tone === "neutral") return null;
+  if (tone === "all") return <ListFilter size={13} className={`dropdown-option-icon ${tone}`} />;
   if (tone === "idle") return <CircleCheckBig size={13} className={`dropdown-option-icon ${tone}`} />;
   if (tone === "running") return <Play size={13} className={`dropdown-option-icon ${tone}`} />;
   if (tone === "scheduled") return <CalendarClock size={13} className={`dropdown-option-icon ${tone}`} />;
@@ -23,18 +42,28 @@ export function SmartFilterDropdown({
   options,
   label,
   searchLabel,
+  multiple = false,
   onChange
-}: {
-  value: string;
-  options: DropdownOption[];
-  label: string;
-  searchLabel: string;
-  onChange: (value: string) => void;
-}) {
+}: SmartFilterDropdownProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const filteredOptions = options.filter((option) => option.label.toLowerCase().includes(search.trim().toLowerCase()));
-  const selected = options.find((option) => option.value === value);
+  const selectedValues = Array.isArray(value) ? value : [value];
+  const selectedOptions = options.filter((option) => selectedValues.includes(option.value));
+  const hasAllSelected = selectedValues.includes("all");
+  const selected = selectedOptions[0];
+  const triggerLabel = multiple
+    ? hasAllSelected || selectedOptions.length === 0
+      ? label
+      : selectedOptions.length === 1
+        ? selectedOptions[0].label
+        : `${selectedOptions.length} ${label}`
+    : selected?.label || label;
+  const triggerTone = multiple ? (hasAllSelected || selectedOptions.length > 1 ? undefined : selected?.tone) : selected?.tone;
+
+  function isOptionSelected(optionValue: string) {
+    return selectedValues.includes(optionValue);
+  }
 
   return (
     <div
@@ -47,9 +76,9 @@ export function SmartFilterDropdown({
       }}
     >
       <button type="button" className="smart-dropdown-trigger" onClick={() => setOpen((current) => !current)}>
-        <span className={selected?.tone ? `dropdown-trigger-label ${selected.tone}` : "dropdown-trigger-label"}>
-          <DropdownOptionMarker tone={selected?.tone} />
-          {selected?.label || label}
+        <span className={triggerTone ? `dropdown-trigger-label ${triggerTone}` : "dropdown-trigger-label"}>
+          <DropdownOptionMarker tone={triggerTone} />
+          {triggerLabel}
         </span>
         <ChevronDown size={15} className="dropdown-chevron" />
       </button>
@@ -64,16 +93,29 @@ export function SmartFilterDropdown({
               return (
                 <button
                   type="button"
-                  className={value === option.value ? "smart-dropdown-option active" : "smart-dropdown-option"}
+                  className={isOptionSelected(option.value) ? "smart-dropdown-option active" : "smart-dropdown-option"}
                   key={option.value}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
-                    onChange(option.value);
+                    if (multiple) {
+                      const onMultiChange = onChange as (nextValue: string[]) => void;
+                      const current = new Set(selectedValues);
+                      if (option.value === "all") {
+                        onMultiChange(["all"]);
+                        return;
+                      }
+                      current.delete("all");
+                      if (current.has(option.value)) current.delete(option.value);
+                      else current.add(option.value);
+                      onMultiChange(current.size === 0 ? ["all"] : Array.from(current));
+                      return;
+                    }
+                    (onChange as (nextValue: string) => void)(option.value);
                     setOpen(false);
                     setSearch("");
                   }}
                 >
-                  <span className="dropdown-checkbox">{value === option.value ? <Check size={10} /> : null}</span>
+                  <span className="dropdown-checkbox">{isOptionSelected(option.value) ? <Check size={10} /> : null}</span>
                   <span className={option.tone ? `dropdown-option-label ${option.tone}` : "dropdown-option-label"}>
                     <DropdownOptionMarker tone={option.tone} />
                     {option.label}

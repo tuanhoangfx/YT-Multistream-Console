@@ -19,5 +19,5 @@ corepack pnpm test
 - Keep each change focused on one request.
 - Do not change behavior outside approved scope.
 - Run `lint`, `build`, and `test` before submitting.
-- Document notable decisions or risks in `baocao.md`.
+- Document notable decisions or risks in `RELEASE.md`.
 - Prefer small, reviewable commits.

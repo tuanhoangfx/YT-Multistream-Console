@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+if [ "$ALLOW_GIT_PUSH" = "1" ]; then
+  echo "[hook] push explicitly allowed (ALLOW_GIT_PUSH=1)"
+  exit 0
+fi
+
+echo "[hook] Push blocked by policy."
+echo "This repository is configured for local-first release stamping."
+echo "To push intentionally, run:"
+echo "  ALLOW_GIT_PUSH=1 git push <remote> <branch>"
+echo "Or bypass manually with --no-verify if you really intend to."
+exit 1

@@ -1,12 +1,12 @@
 import type { StreamJob } from "../../types";
 import type { DriveLibraryItem } from "../drive/drive-utils";
 
-export function filterQueueRows(jobs: StreamJob[], queueSearch: string, queueStatusFilter: string, queueSourceFilter: string) {
+export function filterQueueRows(jobs: StreamJob[], queueSearch: string, queueStatusFilter: string[], queueSourceFilter: string[]) {
   const term = queueSearch.trim().toLowerCase();
   return jobs.filter((job) => {
     const matchesTerm = !term || job.channelName.toLowerCase().includes(term) || job.lastMessage.toLowerCase().includes(term);
-    const matchesStatus = queueStatusFilter === "all" || job.status === queueStatusFilter;
-    const matchesSource = queueSourceFilter === "all" || job.sourceType === queueSourceFilter;
+    const matchesStatus = queueStatusFilter.includes("all") || queueStatusFilter.includes(job.status);
+    const matchesSource = queueSourceFilter.includes("all") || queueSourceFilter.includes(job.sourceType);
     return matchesTerm && matchesStatus && matchesSource;
   });
 }

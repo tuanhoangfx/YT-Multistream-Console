@@ -21,7 +21,7 @@ Use this checklist when creating or standardizing a desktop tool repository.
 - [ ] Core scripts: `dev`, `build`, `preview`, `start`.
 - [ ] Quality scripts: `lint`, `lint:fix`, `format`, `format:check`.
 - [ ] Test scripts: `test`, `test:unit`, `test:smoke`, `test:smoke:ci`, `test:live`.
-- [ ] Release-governance scripts: `sync:bump`, `sync:meta`, `sync:changelog`, `check:changelog`, `sync:all`, `audit:cleanup`.
+- [ ] Release-governance scripts: `sync:bump`, `sync:meta`, `sync:releaselog`, `check:releaselog`, `sync:all`, `audit:cleanup`.
 
 ## Docs Standard
 
@@ -29,22 +29,20 @@ Use this checklist when creating or standardizing a desktop tool repository.
 - [ ] `PROJECT_CONTEXT.md`
 - [ ] `ARCHITECTURE.md`
 - [ ] `CONTRIBUTING.md`
-- [ ] `CHANGELOG.md`
 - [ ] `RELEASE.md`
-- [ ] `TOOL_STATUS.md`
 
 ## Manifest Standard
 
 - [ ] `tool.manifest.json` has `schemaVersion`, `id`, `name`, `summary`, `stack`.
 - [ ] `commands` includes at least `dev`, `build`, `preview`, `smoke`, `package`.
-- [ ] `docs` includes `readme`, `context`, `architecture`, `contributing`, `changelog`, `release`.
+- [ ] `docs` includes `readme`, `context`, `architecture`, `contributing`, `release`.
 - [ ] `release.version` matches `package.json` version.
 
 ## Workflow Standard
 
 - [ ] `ci.yml` uses reusable verify workflow.
 - [ ] `release.yml` uses reusable release workflow.
-- [ ] Reusable verify workflow enforces: metadata sync, changelog check, audit, lint, unit tests, build.
+- [ ] Reusable verify workflow enforces: metadata sync, release-log check, audit, lint, unit tests, build.
 - [ ] Reusable release workflow enforces quality gates before `dist`.
 
 ## Final Verification
@@ -53,5 +51,5 @@ Use this checklist when creating or standardizing a desktop tool repository.
 - [ ] `pnpm lint`
 - [ ] `pnpm test:unit`
 - [ ] `pnpm build`
-- [ ] `pnpm check:changelog`
+- [ ] `pnpm check:releaselog`
 - [ ] `pnpm audit:cleanup`

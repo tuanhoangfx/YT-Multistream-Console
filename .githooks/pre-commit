@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+echo "[hook] release stamp (code changes only)"
+pnpm release:code-only-stamp
+
+git add package.json tool.manifest.json RELEASE.md

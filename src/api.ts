@@ -1,4 +1,4 @@
-import type { ChangelogEntry, StreamJob } from "./types";
+import type { ReleaseLogEntry, StreamJob } from "./types";
 
 export function startStreamJob(job: StreamJob) {
   return window.streaming.startJob({
@@ -29,8 +29,8 @@ export function checkFfmpegStatus() {
   return window.streaming.checkFfmpeg();
 }
 
-export function readChangelog(): Promise<{ ok: boolean; entries: ChangelogEntry[]; message?: string }> {
-  return window.streaming.readChangelog();
+export function readReleaseLog(): Promise<{ ok: boolean; entries: ReleaseLogEntry[]; message?: string }> {
+  return window.streaming.readReleaseLog();
 }
 
 export function pickLocalVideo() {

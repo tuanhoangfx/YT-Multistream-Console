@@ -15,6 +15,7 @@ export type StreamJob = {
   backupRtmpUrl: string;
   streamKey: string;
   status: JobStatus;
+  publishMode?: "immediate" | "scheduled";
   scheduledAt?: string;
   lastMessage: string;
   updatedAt: string;
@@ -27,7 +28,7 @@ export type StreamEvent = {
   status?: JobStatus;
 };
 
-export type ChangelogEntry = {
+export type ReleaseLogEntry = {
   version: string;
   timestamp: string;
   title: string;
@@ -42,7 +43,7 @@ declare global {
       stopJob: (payload: Record<string, unknown>) => Promise<{ ok: boolean; stopped: boolean }>;
       stopAllJobs: () => Promise<{ ok: boolean; count: number }>;
       checkFfmpeg: () => Promise<{ ok: boolean; message: string }>;
-      readChangelog: () => Promise<{ ok: boolean; entries: ChangelogEntry[]; message?: string }>;
+      readReleaseLog: () => Promise<{ ok: boolean; entries: ReleaseLogEntry[]; message?: string }>;
       scanDriveFolder: (payload: Record<string, unknown>) => Promise<{ ok: boolean; links: string[]; message: string }>;
       probeDriveLink: (payload: Record<string, unknown>) => Promise<{ ok: boolean; name: string; duration: string; resolution: string; size: string; message: string }>;
       onJobEvent: (handler: (event: StreamEvent) => void) => () => void;

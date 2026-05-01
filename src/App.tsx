@@ -33,8 +33,9 @@ import {
   Zap
 } from "lucide-react";
 import { type MouseEvent, useEffect, useMemo, useState } from "react";
-import { checkFfmpegStatus, pickLocalVideo, probeDriveLink, readChangelog, scanDriveFolder, startStreamJob, stopAllStreams, stopStreamJob } from "./api";
-import type { ChangelogEntry, StreamEvent, StreamJob } from "./types";
+import { checkFfmpegStatus, pickLocalVideo, probeDriveLink, readReleaseLog, scanDriveFolder, startStreamJob, stopAllStreams, stopStreamJob } from "./api";
+import type { ReleaseLogEntry, StreamEvent, StreamJob } from "./types";
+import releaseLogMarkdown from "../RELEASE.md?raw";
 import { getJobDriveUrls, uniqueDriveUrls, driveFileKey, hasDriveValue, parseDriveLinks, type DriveLibraryItem, type DriveMetadataStatus } from "./features/drive/drive-utils";
 import { appendDriveLinks, applyGroupToDriveLinks, markDriveMetadataPending, removeDriveLinkById, removeSelectedDriveLinks } from "./features/drive/actions";
 import { persistDriveLibrary, persistJobs, persistTheme, readDriveLibrary, readJobs, readTheme } from "./features/app/storage";
@@ -79,39 +80,39 @@ const TOOL_GUIDE_SECTIONS = [
     ]
   }
 ] as const;
-const VERSION_LOG_FALLBACK: ChangelogEntry[] = [
-  {
-    version: "2026-04-26",
-    timestamp: "2026-04-26 00:00",
-    title: "Stability pass for direct streaming test",
-    items: [
-      "Bundled ffmpeg runtime so streams run without PATH-based ffmpeg setup.",
-      "Added primary plus backup RTMP output support using single-process tee muxer.",
-      "Added stream-key validation and masking in runtime logs for safer diagnostics.",
-      "Improved migration for older channel configurations and added smoke test command."
-    ]
-  },
-  {
-    version: "2026-04-26",
-    timestamp: "2026-04-26 00:00",
-    title: "Initial multistream console baseline",
-    items: [
-      "Shipped Electron plus React desktop baseline for YT multistream operations.",
-      "Added multi-channel queue with per-channel source and RTMP configuration.",
-      "Implemented realtime log bridge and start/stop controls for selected or all channels."
-    ]
-  },
-  {
-    version: "2026-04-28",
-    timestamp: "2026-04-28 00:00",
-    title: "Guide and changelog design standardization",
-    items: [
-      "Aligned topbar Guide, Changelog, and Refresh controls with shared design standards.",
-      "Standardized modal structure, icon treatment, and section card layout to match GPM pattern.",
-      "Updated help content for YT-specific queue, runtime, and Drive source workflows."
-    ]
+const VERSION_LOG_FALLBACK: ReleaseLogEntry[] = parseReleaseLogEntries(releaseLogMarkdown, 20);
+
+function parseReleaseLogEntries(markdown: string, maxEntries = 20): ReleaseLogEntry[] {
+  const source = String(markdown || "");
+  const sections = source.split(/\r?\n(?=## )/g);
+  const entries: ReleaseLogEntry[] = [];
+  for (const section of sections) {
+    const headingMatch = section.match(/^##\s+(\d{4}-\d{2}-\d{2})\s+-\s+(.+)$/m);
+    if (!headingMatch) continue;
+    const date = headingMatch[1];
+    const title = headingMatch[2].trim();
+    const versionMatch = section.match(/^- Version:\s*`?([0-9]+\.[0-9]+\.[0-9]+)`?\s*$/m);
+    const timestampMatch = section.match(/^- Timestamp:\s*(.+)\s*$/m);
+    const changesMatch = section.match(/### Changes\s*\r?\n([\s\S]*?)(?:\r?\n### |\s*$)/);
+    if (!changesMatch) continue;
+    const items = changesMatch[1]
+      .split(/\r?\n/)
+      .map((line) => String(line || "").trim())
+      .filter((line) => line.startsWith("- "))
+      .map((line) => line.slice(2).trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    if (items.length === 0) continue;
+    entries.push({
+      version: (versionMatch && versionMatch[1]) || date,
+      timestamp: (timestampMatch && timestampMatch[1] && timestampMatch[1].trim()) || `${date} 00:00`,
+      title,
+      items
+    });
+    if (entries.length >= maxEntries) break;
   }
-];
+  return entries;
+}
 
 type LogLine = { id: string; time: string; level: "info" | "success" | "error"; message: string };
 
@@ -137,8 +138,8 @@ export function App() {
   const [driveScanBusy, setDriveScanBusy] = useState(false);
   const [metadataLoadingIds, setMetadataLoadingIds] = useState<string[]>([]);
   const [queueSearch, setQueueSearch] = useState("");
-  const [queueStatusFilter, setQueueStatusFilter] = useState("all");
-  const [queueSourceFilter, setQueueSourceFilter] = useState("all");
+  const [queueStatusFilter, setQueueStatusFilter] = useState<string[]>(["all"]);
+  const [queueSourceFilter, setQueueSourceFilter] = useState<string[]>(["all"]);
   const [librarySearch, setLibrarySearch] = useState("");
   const [libraryGroupFilter, setLibraryGroupFilter] = useState("all");
   const [libraryResolutionFilter, setLibraryResolutionFilter] = useState("all");
@@ -151,7 +152,7 @@ export function App() {
   const [libraryPageSize, setLibraryPageSize] = useState(20);
   const [showToolGuide, setShowToolGuide] = useState(false);
   const [showVersionLog, setShowVersionLog] = useState(false);
-  const [versionLogEntries, setVersionLogEntries] = useState<ChangelogEntry[]>(VERSION_LOG_FALLBACK);
+  const [versionLogEntries, setVersionLogEntries] = useState<ReleaseLogEntry[]>(() => VERSION_LOG_FALLBACK);
   const [lastDrivePickIndex, setLastDrivePickIndex] = useState<number | null>(null);
 
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || jobs[0];
@@ -246,14 +247,18 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    readChangelog()
+    readReleaseLog()
       .then((result) => {
         if (result.ok && Array.isArray(result.entries) && result.entries.length > 0) {
           setVersionLogEntries(result.entries);
+          return;
         }
+        const fallbackEntries = parseReleaseLogEntries(releaseLogMarkdown, 20);
+        if (fallbackEntries.length > 0) setVersionLogEntries(fallbackEntries);
       })
       .catch(() => {
-        // Keep fallback list when changelog cannot be loaded.
+        const fallbackEntries = parseReleaseLogEntries(releaseLogMarkdown, 20);
+        if (fallbackEntries.length > 0) setVersionLogEntries(fallbackEntries);
       });
   }, []);
 
@@ -324,6 +329,7 @@ export function App() {
       backupRtmpUrl: "rtmp://b.rtmp.youtube.com/live2?backup=1",
       streamKey: "",
       status: "idle",
+      publishMode: "immediate",
       scheduledAt: "",
       lastMessage: "Ready",
       updatedAt: now()
@@ -411,7 +417,7 @@ export function App() {
   }
 
   function scheduleSelectedJob() {
-    if (!selectedJob?.scheduledAt) {
+    if (!selectedJob || selectedJob.publishMode !== "scheduled" || !selectedJob.scheduledAt) {
       setError("Pick a schedule time first.");
       return;
     }
@@ -565,24 +571,17 @@ export function App() {
     return "Pending";
   }
 
-  const selectedSourceLabel = useMemo(() => {
-    if (!selectedJob) return "-";
-    if (selectedJob.sourceType === "local") return selectedJob.localPath || "No local file selected";
-    const driveUrls = getJobDriveUrls(selectedJob);
-    if (driveUrls.length > 1) return `${driveUrls.length} Google Drive links (${selectedJob.drivePlayMode === "random" ? "Random" : "Xoay vòng"})`;
-    return driveUrls[0] || "No Google Drive URL";
-  }, [selectedJob]);
   const ffmpegPillClass = ffmpegStatus === "ok" ? "connected" : ffmpegStatus === "missing" ? "offline" : "";
   const ffmpegPillLabel = ffmpegStatus === "ok" ? "ffmpeg ready" : ffmpegStatus === "missing" ? "ffmpeg missing" : "checking ffmpeg";
   const queueStatusOptions: DropdownOption[] = [
-    { value: "all", label: "All status", tone: "neutral" },
+    { value: "all", label: "All", tone: "all" },
     { value: "idle", label: "Ready", tone: "idle" },
     { value: "running", label: "Running", tone: "running" },
     { value: "scheduled", label: "Schedule", tone: "scheduled" },
     { value: "failed", label: "Failed", tone: "failed" }
   ];
   const queueSourceOptions: DropdownOption[] = [
-    { value: "all", label: "All sources", tone: "neutral" },
+    { value: "all", label: "All", tone: "all" },
     { value: "local", label: "Local file", tone: "local" },
     { value: "drive", label: "Google Drive", tone: "drive" }
   ];
@@ -591,15 +590,23 @@ export function App() {
     { value: "drive", label: "Google Drive", tone: "drive" }
   ];
   const drivePlayModeOptions: DropdownOption[] = [
-    { value: "sequential", label: "Xoay vòng", tone: "scheduled" },
+    { value: "sequential", label: "Loop", tone: "scheduled" },
     { value: "random", label: "Random", tone: "running" }
   ];
+  const publishModeOptions: DropdownOption[] = [
+    { value: "immediate", label: "Publish now", tone: "running" },
+    { value: "scheduled", label: "Schedule", tone: "scheduled" }
+  ];
+  const tablePageSizeDropdownOptions: DropdownOption[] = TABLE_PAGE_SIZE_OPTIONS.map((size) => ({
+    value: String(size),
+    label: `${size}`
+  }));
   const libraryResolutionDropdownOptions: DropdownOption[] = [
-    { value: "all", label: "All resolutions" },
+    { value: "all", label: "All" },
     ...libraryResolutionOptions.map((resolution) => ({ value: resolution, label: resolution }))
   ];
   const libraryGroupDropdownOptions: DropdownOption[] = [
-    { value: "all", label: "All groups" },
+    { value: "all", label: "All" },
     ...libraryGroupOptions.map((group) => ({ value: group, label: group }))
   ];
   return (
@@ -630,9 +637,9 @@ export function App() {
               <BookOpen size={16} />
               Guide
             </button>
-            <button className="ghost slim-button" onClick={() => setShowVersionLog(true)} title="Version update log">
+            <button className="ghost slim-button" onClick={() => setShowVersionLog(true)} title="Release update log">
               <History size={16} />
-              Changelog
+              Release Log
             </button>
             <button className="ghost slim-button" onClick={() => void refreshAll()} disabled={busy} title="Refresh diagnostics and status">
               <RefreshCw size={16} />
@@ -715,8 +722,15 @@ export function App() {
                 <Search size={15} />
                 <input value={queueSearch} onChange={(event) => setQueueSearch(event.target.value)} placeholder="Search channels" />
               </label>
-              <SmartFilterDropdown value={queueStatusFilter} options={queueStatusOptions} label="All status" searchLabel="Search status..." onChange={setQueueStatusFilter} />
-              <SmartFilterDropdown value={queueSourceFilter} options={queueSourceOptions} label="All sources" searchLabel="Search sources..." onChange={setQueueSourceFilter} />
+              <SmartFilterDropdown value={queueStatusFilter} options={queueStatusOptions} label="Status" searchLabel="Search status..." multiple onChange={(value) => setQueueStatusFilter(Array.isArray(value) ? value : [value])} />
+              <SmartFilterDropdown
+                value={queueSourceFilter}
+                options={queueSourceOptions}
+                label="Source"
+                searchLabel="Search source..."
+                multiple
+                onChange={(value) => setQueueSourceFilter(Array.isArray(value) ? value : [value])}
+              />
             </div>
             <div className="job-list">
               <div className="table-scroll">
@@ -826,13 +840,13 @@ export function App() {
                   </span>
                   <label>
                     Rows per page
-                    <select className="table-page-size" value={queuePageSize} onChange={(event) => setQueuePageSize(Number(event.target.value))}>
-                      {TABLE_PAGE_SIZE_OPTIONS.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
+                    <SmartFilterDropdown
+                      value={String(queuePageSize)}
+                      options={tablePageSizeDropdownOptions}
+                      label="Rows per page"
+                      searchLabel="Search page size..."
+                      onChange={(value) => setQueuePageSize(Number(value))}
+                    />
                   </label>
                 </div>
               </div>
@@ -968,33 +982,56 @@ export function App() {
                         <CalendarClock size={13} />
                         Schedule
                       </h3>
+                      <label className="schedule-mode-field">
+                        Publish mode
+                        <SmartFilterDropdown
+                          value={selectedJob.publishMode || "immediate"}
+                          options={publishModeOptions}
+                          label="Publish mode"
+                          searchLabel="Search publish mode..."
+                          onChange={(value) => {
+                            const nextMode = value as StreamJob["publishMode"];
+                            if (nextMode === "immediate") {
+                              if (selectedJob.status === "scheduled") {
+                                updateSelectedJob({ publishMode: "immediate", ...buildCancelledScheduleUpdate(), lastMessage: "Ready" });
+                                return;
+                              }
+                              updateSelectedJob({ publishMode: "immediate", scheduledAt: "" });
+                              return;
+                            }
+                            updateSelectedJob({ publishMode: "scheduled" });
+                          }}
+                        />
+                      </label>
                       <div className="schedule-grid">
-                        <label>
-                          Schedule time
-                          <input
-                            type="datetime-local"
-                            value={selectedJob.scheduledAt || ""}
-                            onChange={(event) => updateSelectedJob({ scheduledAt: event.target.value })}
-                          />
-                        </label>
-                        <div className="source-summary">
-                          <SourceBadge sourceType={selectedJob.sourceType} />
-                          <span title={selectedSourceLabel}>{selectedSourceLabel}</span>
-                        </div>
-                      </div>
-                      <div className="schedule-actions">
-                        {selectedJob.status === "scheduled" ? (
-                          <button className="ghost slim-button" onClick={cancelSelectedSchedule}>
-                            <CalendarClock size={14} />
-                            Cancel schedule
-                          </button>
+                        {(selectedJob.publishMode || "immediate") === "scheduled" ? (
+                          <label>
+                            Schedule time
+                            <input
+                              type="datetime-local"
+                              value={selectedJob.scheduledAt || ""}
+                              onChange={(event) => updateSelectedJob({ scheduledAt: event.target.value })}
+                            />
+                          </label>
                         ) : (
-                          <button className="ghost slim-button" onClick={scheduleSelectedJob}>
-                            <CalendarClock size={14} />
-                            Schedule selected
-                          </button>
+                          <span className="schedule-mode-hint">Publish now: stream starts when you click Start selected.</span>
                         )}
                       </div>
+                      {(selectedJob.publishMode || "immediate") === "scheduled" && (
+                        <div className="schedule-actions">
+                          {selectedJob.status === "scheduled" ? (
+                            <button className="ghost slim-button" onClick={cancelSelectedSchedule}>
+                              <CalendarClock size={14} />
+                              Cancel schedule
+                            </button>
+                          ) : (
+                            <button className="ghost slim-button" onClick={scheduleSelectedJob}>
+                              <CalendarClock size={14} />
+                              Schedule selected
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </section>
                   </div>
                   <div className="stream-action-bar">
@@ -1121,14 +1158,14 @@ export function App() {
               <SmartFilterDropdown
                 value={libraryGroupFilter}
                 options={libraryGroupDropdownOptions}
-                label="All groups"
+                label="Group"
                 searchLabel="Search groups..."
                 onChange={setLibraryGroupFilter}
               />
               <SmartFilterDropdown
                 value={libraryResolutionFilter}
                 options={libraryResolutionDropdownOptions}
-                label="All resolutions"
+                label="Resolution"
                 searchLabel="Search resolutions..."
                 onChange={setLibraryResolutionFilter}
               />
@@ -1293,13 +1330,13 @@ export function App() {
                   </span>
                   <label>
                     Rows per page
-                    <select className="table-page-size" value={libraryPageSize} onChange={(event) => setLibraryPageSize(Number(event.target.value))}>
-                      {TABLE_PAGE_SIZE_OPTIONS.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
+                    <SmartFilterDropdown
+                      value={String(libraryPageSize)}
+                      options={tablePageSizeDropdownOptions}
+                      label="Rows per page"
+                      searchLabel="Search page size..."
+                      onChange={(value) => setLibraryPageSize(Number(value))}
+                    />
                   </label>
                 </div>
               </div>
@@ -1355,7 +1392,7 @@ export function App() {
                 <SmartFilterDropdown
                   value={configDriveGroupFilter}
                   options={libraryGroupDropdownOptions}
-                  label="All groups"
+                  label="Group"
                   searchLabel="Search groups..."
                   onChange={setConfigDriveGroupFilter}
                 />
@@ -1588,15 +1625,16 @@ export function App() {
                 <div>
                   <h2>
                     <History size={17} />
-                    Version Log
+                    Release Log
                   </h2>
-                  <p className="muted">Recent update highlights from the changelog.</p>
+                  <p className="muted">Recent update highlights from the release log.</p>
                 </div>
                 <button className="icon-only" onClick={() => setShowVersionLog(false)} title="Close version log">
                   <X size={18} />
                 </button>
               </header>
               <div className="info-modal-body version-log-list">
+                {versionLogEntries.length === 0 && <p className="muted">No release entries loaded yet.</p>}
                 {versionLogEntries.map((entry, index) => {
                   const EntryIcon = index % 3 === 0 ? RefreshCw : index % 3 === 1 ? CheckCircle2 : BookOpen;
                   return (

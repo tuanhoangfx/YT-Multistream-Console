@@ -1,6 +1,6 @@
 {
   "name": "yt-multistream-console",
-  "version": "0.1.0",
+  "version": "0.1.11",
   "private": true,
   "description": "Desktop console for multi-channel YouTube livestream from local or Google Drive source.",
   "author": "YT Multistream Console",
@@ -24,15 +24,26 @@
     "test:live": "node scripts/live-test.cjs",
     "audit:cleanup": "node scripts/audit-cleanup.mjs",
     "sync:bump": "node scripts/bump-patch-version.mjs",
-    "sync:changelog": "node scripts/sync-changelog.mjs",
-    "check:changelog": "node scripts/sync-changelog.mjs --check",
+    "sync:releaselog": "node scripts/sync-release-log.mjs",
+    "check:releaselog": "node scripts/sync-release-log.mjs --check",
+    "sync:changelog": "pnpm sync:releaselog",
+    "check:changelog": "pnpm check:releaselog",
     "sync:meta": "node scripts/sync-metadata-version.mjs",
-    "sync:all": "pnpm sync:bump && pnpm sync:meta && pnpm sync:changelog",
+    "sync:all": "pnpm sync:bump && pnpm sync:meta && pnpm sync:releaselog",
+    "finalize:change": "pnpm sync:bump && pnpm sync:meta && pnpm sync:releaselog",
+    "release:stamp": "pnpm sync:bump && pnpm sync:meta && pnpm sync:releaselog",
+    "release:code-only-stamp": "node scripts/release-stamp-if-code-change.mjs",
+    "release:auto": "pnpm release:code-only-stamp",
+    "release:tag-local": "node scripts/tag-local-release.mjs",
+    "rollback:list": "git tag --list \"v*\" --sort=-v:refname",
+    "rollback:restore": "node scripts/rollback-to-tag.mjs",
+    "hooks:install": "node scripts/install-git-hooks.mjs",
     "pack": "corepack pnpm build && electron-builder --dir",
     "dist": "corepack pnpm build && electron-builder --win nsis-web --publish never",
     "release": "corepack pnpm build && electron-builder --win nsis-web --publish always",
     "preview": "vite preview --host 127.0.0.1 --port 5174",
-    "start": "electron ."
+    "start": "electron .",
+    "postinstall": "pnpm hooks:install"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
@@ -70,7 +81,8 @@
     "files": [
       "dist/**",
       "electron/**",
-      "package.json"
+      "package.json",
+      "RELEASE.md"
     ],
     "win": {
       "target": "nsis-web"

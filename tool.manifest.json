@@ -2,13 +2,23 @@
   "schemaVersion": 1,
   "code": "P0002",
   "id": "yt-multistream-console",
-  "aliases": ["P0002", "YT", "YT Multistream", "YT Multistream Console"],
+  "aliases": [
+    "P0002",
+    "YT",
+    "YT Multistream",
+    "YT Multistream Console"
+  ],
   "name": "YT Multistream Console",
   "type": "Desktop",
   "owner": "Tool",
   "status": "Ready",
   "summary": "Local desktop console for running multi-channel YouTube livestream jobs from local video files or Google Drive links.",
-  "stack": ["Electron", "React", "Vite", "FFmpeg"],
+  "stack": [
+    "Electron",
+    "React",
+    "Vite",
+    "FFmpeg"
+  ],
   "commands": {
     "dev": "corepack pnpm dev",
     "build": "corepack pnpm build",
@@ -19,7 +29,6 @@
   "docs": {
     "readme": "README.md",
     "context": "PROJECT_CONTEXT.md",
-    "changelog": "CHANGELOG.md",
     "release": "RELEASE.md",
     "architecture": "ARCHITECTURE.md",
     "contributing": "CONTRIBUTING.md"
@@ -30,8 +39,13 @@
     "manifestPath": "tool.manifest.json"
   },
   "release": {
-    "version": "0.1.0",
-    "readiness": ["build", "docs", "smoke-test", "stream-key-masking"]
+    "version": "0.1.11",
+    "readiness": [
+      "build",
+      "docs",
+      "smoke-test",
+      "stream-key-masking"
+    ]
   },
   "health": {
     "status": "Ready",
