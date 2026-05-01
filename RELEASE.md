@@ -2,6 +2,32 @@
 
 Release and distribution process for `YT Multistream Console`.
 
+## 2026-05-01 - Automation Update 0.1.12
+
+- Version: `0.1.12`
+- Timestamp: 2026-05-01 19:23 (UTC+7)
+- Commit: `118723a`
+- Type: Maintenance/Automation
+- Status: Verified
+
+### Changes
+
+- Updated source version to `0.1.12` and synced release metadata.
+- Updated `.githooks/post-commit`.
+- Updated `.githooks/pre-commit`.
+- Updated `scripts/check-version-sync.mjs`.
+
+
+### Verification
+
+```powershell
+pnpm sync:all
+pnpm build
+```
+
+Result: passed.
+
+
 ## 2026-05-01 - Code Update 0.1.11
 
 - Version: `0.1.11`

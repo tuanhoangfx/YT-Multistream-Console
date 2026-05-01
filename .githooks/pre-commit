@@ -1,7 +1,10 @@
 #!/bin/sh
 set -e
 
-echo "[hook] release stamp (code changes only)"
+echo "[hook] release stamp"
 pnpm release:code-only-stamp
 
 git add package.json tool.manifest.json RELEASE.md
+
+echo "[hook] verify version sync"
+pnpm check:version-sync

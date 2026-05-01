@@ -1,5 +1,10 @@
 #!/bin/sh
 set -e
 
+if [ "$GPM_AUTO_COMMIT_RUNNING" = "1" ]; then
+  echo "[hook] post-commit skipped (auto-commit guard)"
+  exit 0
+fi
+
 echo "[hook] local release tag"
 pnpm release:tag-local
