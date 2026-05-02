@@ -27,17 +27,28 @@ function extractDriveFileId(rawUrl) {
 }
 
 function driveFileKey(rawUrl) {
-  return extractDriveFileId(rawUrl) || String(rawUrl || "").trim();
+  const id = extractDriveFileId(rawUrl);
+  return id || "";
+}
+
+/** Matches renderer `isValidDriveLibraryFileUrl`: file/play links only; no folder views. */
+function isValidDriveLibraryFileUrl(rawUrl) {
+  const url = String(rawUrl || "").trim();
+  if (!/^https:\/\/drive\.google\.com\//i.test(url)) return false;
+  if (/\/folders\//i.test(url) || /\/embeddedfolderview/i.test(url)) return false;
+  if (/\/file\/d\/[a-zA-Z0-9_-]+/.test(url)) return true;
+  const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return Boolean(idMatch?.[1]);
 }
 
 function uniqueDriveUrls(urls) {
   const seen = new Set();
   return urls
     .map((url) => String(url || "").trim())
-    .filter((url) => /^https:\/\/drive\.google\.com\//i.test(url))
+    .filter(isValidDriveLibraryFileUrl)
     .filter((url) => {
       const key = driveFileKey(url);
-      if (seen.has(key)) return false;
+      if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;
     });
@@ -60,14 +71,123 @@ function extractDriveFolderId(rawUrl) {
   return folderMatch?.[1] || queryMatch?.[1] || "";
 }
 
+function extractDriveResourceKey(rawUrl) {
+  const value = String(rawUrl || "").trim();
+  if (!value) return "";
+  try {
+    const key = new URL(value, "https://drive.google.com/").searchParams.get("resourcekey");
+    return key ? key.trim() : "";
+  } catch {
+    const match = value.match(/[?&]resourcekey=([^&#]+)/i);
+    return match?.[1] ? decodeURIComponent(match[1].trim()) : "";
+  }
+}
+
+/**
+ * Parses window['_DRIVE_ivd'], a hex-\\xNN–escaped blob where Google Drive
+ * embeds essentially the full folder listing (often with no literal /file/d/ URLs).
+ */
+function extractDriveIvdDecodedString(html) {
+  const haystack = String(html || "");
+  const markers = [
+    { needle: "window['_DRIVE_ivd']", quote: "'" },
+    { needle: 'window["_DRIVE_ivd"]', quote: '"' }
+  ];
+  for (const { needle, quote } of markers) {
+    const pos = haystack.indexOf(needle);
+    if (pos < 0) continue;
+    let i = haystack.indexOf("=", pos + needle.length);
+    if (i < 0) continue;
+    i += 1;
+    while (i < haystack.length && /\s/.test(haystack[i])) i += 1;
+    if (haystack[i] !== quote) continue;
+    i += 1;
+    let out = "";
+    while (i < haystack.length) {
+      const ch = haystack[i];
+      if (ch === quote) break;
+      if (ch === "\\" && i + 1 < haystack.length) {
+        const next = haystack[i + 1];
+        if ((next === "x" || next === "X") && /^[0-9a-fA-F]{2}$/.test(haystack.slice(i + 2, i + 4))) {
+          out += String.fromCharCode(Number.parseInt(haystack.slice(i + 2, i + 4), 16));
+          i += 4;
+          continue;
+        }
+        if ((next === "u" || next === "U") && /^[0-9a-fA-F]{4}$/.test(haystack.slice(i + 2, i + 6))) {
+          out += String.fromCharCode(Number.parseInt(haystack.slice(i + 2, i + 6), 16));
+          i += 6;
+          continue;
+        }
+        const escapes = { n: "\n", r: "\r", t: "\t" };
+        if (escapes[next] !== undefined) {
+          out += escapes[next];
+          i += 2;
+          continue;
+        }
+        out += next;
+        i += 2;
+        continue;
+      }
+      out += ch;
+      i += 1;
+    }
+    return out;
+  }
+  return null;
+}
+
+function isDriveIvdFileIdCandidate(id) {
+  const raw = String(id || "").trim();
+  if (!/^[A-Za-z0-9_-]{10,}$/.test(raw) || raw.length > 96) return false;
+  const letterCount = (raw.match(/[A-Za-z]/g) || []).length;
+  const digitCount = (raw.match(/[0-9]/g) || []).length;
+  const underscoreDash = raw.replace(/[A-Za-z0-9]/g, "").length;
+  const mixScore = Number(letterCount > 0) + Number(digitCount > 0) + Number(underscoreDash > 0);
+  if (digitCount >= 14 && /^[0-9_-]+$/.test(raw)) return true;
+  return mixScore >= 2 || (digitCount >= 10 && letterCount >= 2);
+}
+
+function extractDocIdsFromDriveIvdDecoded(decoded) {
+  const text = String(decoded || "");
+  if (!text) return [];
+  const ids = new Set();
+  const rowHead = /\[\[\["([A-Za-z0-9_-]{10,})"/g;
+  let match = rowHead.exec(text);
+  while (match) {
+    const docId = match[1];
+    const start = match.index;
+    const nextHead = text.indexOf('[[["', start + 3);
+    const sliceEnd = nextHead < 0 ? Math.min(text.length, start + 1200) : nextHead;
+    const segment = text.slice(start, sliceEnd);
+    if (!segment.includes('"application/vnd.google-apps.folder"') && isDriveIvdFileIdCandidate(docId)) {
+      ids.add(docId);
+    }
+    match = rowHead.exec(text);
+  }
+  return Array.from(ids);
+}
+
+function normalizeDriveListingHtml(html) {
+  return String(html || "")
+    .replace(/\\u003d/gi, "=")
+    .replace(/\\u002f/gi, "/")
+    .replace(/\\u0026/gi, "&")
+    .replace(/\\\//g, "/");
+}
+
 function extractVideoLinksFromDriveHtml(html) {
-  const text = String(html || "");
+  const raw = String(html || "");
+  const text = normalizeDriveListingHtml(raw);
+  const decodedIvd = extractDriveIvdDecodedString(html);
   const ids = new Set();
   const registerCandidate = (candidate) => {
     const id = String(candidate || "").trim();
     if (!isLikelyDriveFileId(id)) return;
     ids.add(id);
   };
+
+  extractDocIdsFromDriveIvdDecoded(decodedIvd).forEach((id) => ids.add(id));
+
   const directLinkPattern = /https:\/\/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{20,})/gi;
   let match = directLinkPattern.exec(text);
   while (match) {
@@ -654,25 +774,43 @@ function bindStreamingApi() {
     const headers = {
       "User-Agent": "Mozilla/5.0 YT-Multistream-Console"
     };
-    const scanUrls = [
-      `https://drive.google.com/drive/folders/${folderId}?usp=drive_link`,
-      `https://drive.google.com/embeddedfolderview?id=${folderId}#list`
-    ];
+    const folderResourceKey = extractDriveResourceKey(folderUrl).trim();
+    const encodedKey = folderResourceKey ? encodeURIComponent(folderResourceKey) : "";
+    const scanUrls = [];
+    const enqueue = (candidate) => {
+      const trimmed = String(candidate || "").trim();
+      if (!trimmed || scanUrls.includes(trimmed)) return;
+      scanUrls.push(trimmed);
+    };
+
+    if (encodedKey) {
+      enqueue(`https://drive.google.com/drive/folders/${folderId}?resourcekey=${encodedKey}&usp=drive_link`);
+      enqueue(`https://drive.google.com/embeddedfolderview?id=${folderId}&resourcekey=${encodedKey}#list`);
+      enqueue(`https://drive.google.com/embeddedfolderview?id=${folderId}&resourcekey=${encodedKey}#grid`);
+    }
+    enqueue(`https://drive.google.com/drive/folders/${folderId}?usp=drive_link`);
+    enqueue(`https://drive.google.com/embeddedfolderview?id=${folderId}#list`);
+    enqueue(`https://drive.google.com/embeddedfolderview?id=${folderId}#grid`);
+
     let links = [];
     let signInRequired = false;
 
     for (const url of scanUrls) {
-      const response = await fetch(url, { headers, redirect: "follow" });
-      if (!response.ok) continue;
-      const html = await response.text();
-      signInRequired = signInRequired || driveHtmlRequiresSignIn(html);
-      const found = extractVideoLinksFromDriveHtml(html);
-      if (found.length > links.length) links = found;
-      if (links.length > 0) break;
+      try {
+        const response = await fetch(url, { headers, redirect: "follow" });
+        if (!response.ok) continue;
+        const html = await response.text();
+        signInRequired = signInRequired || driveHtmlRequiresSignIn(html);
+        const found = extractVideoLinksFromDriveHtml(html);
+        if (found.length === 0) continue;
+        links = uniqueDriveUrls([...links, ...found]);
+      } catch {
+        // Try remaining scan URL variants (Drive layout differences, transient errors).
+      }
     }
 
     if (links.length > 0) {
-      return { ok: true, links, message: `Found ${links.length} video link(s).` };
+      return { ok: true, links, message: `Found ${links.length} file link(s).` };
     }
 
     if (signInRequired) {

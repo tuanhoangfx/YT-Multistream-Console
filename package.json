@@ -1,6 +1,6 @@
 {
   "name": "yt-multistream-console",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "private": true,
   "description": "Desktop console for multi-channel YouTube livestream from local or Google Drive source.",
   "author": "YT Multistream Console",

@@ -1,4 +1,5 @@
-import { CalendarClock, Check, ChevronDown, CircleCheckBig, Cloud, FolderOpen, ListFilter, Play, Search, X } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, CircleCheckBig, FolderOpen, ListFilter, Play, Search, X } from "lucide-react";
+import { GoogleDriveBrandIcon } from "./GoogleDriveBrandIcon";
 import { useState } from "react";
 
 export type DropdownOption = {
@@ -33,7 +34,7 @@ function DropdownOptionMarker({ tone }: { tone?: DropdownOption["tone"] }) {
   if (tone === "scheduled") return <CalendarClock size={13} className={`dropdown-option-icon ${tone}`} />;
   if (tone === "failed") return <X size={13} className={`dropdown-option-icon ${tone}`} />;
   if (tone === "local") return <FolderOpen size={13} className={`dropdown-option-icon ${tone}`} />;
-  if (tone === "drive") return <Cloud size={13} className={`dropdown-option-icon ${tone}`} />;
+  if (tone === "drive") return <GoogleDriveBrandIcon size={13} className={`dropdown-option-icon ${tone}`} />;
   return null;
 }
 

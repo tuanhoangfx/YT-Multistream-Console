@@ -5,8 +5,8 @@ export function filterQueueRows(jobs: StreamJob[], queueSearch: string, queueSta
   const term = queueSearch.trim().toLowerCase();
   return jobs.filter((job) => {
     const matchesTerm = !term || job.channelName.toLowerCase().includes(term) || job.lastMessage.toLowerCase().includes(term);
-    const matchesStatus = queueStatusFilter.includes("all") || queueStatusFilter.includes(job.status);
-    const matchesSource = queueSourceFilter.includes("all") || queueSourceFilter.includes(job.sourceType);
+    const matchesStatus = queueStatusFilter.length === 0 || queueStatusFilter.includes(job.status);
+    const matchesSource = queueSourceFilter.length === 0 || queueSourceFilter.includes(job.sourceType);
     return matchesTerm && matchesStatus && matchesSource;
   });
 }
@@ -14,9 +14,8 @@ export function filterQueueRows(jobs: StreamJob[], queueSearch: string, queueSta
 export function filterLibraryRows(
   driveLibrary: DriveLibraryItem[],
   librarySearch: string,
-  libraryGroupFilter: string,
-  libraryResolutionFilter: string,
-  libraryDurationFilter: string
+  libraryStatusSelection: string[],
+  libraryResolutionSelection: string[]
 ) {
   const term = librarySearch.trim().toLowerCase();
   return driveLibrary.filter((item) => {
@@ -30,18 +29,18 @@ export function filterLibraryRows(
       item.size.toLowerCase().includes(term) ||
       item.metadataStatus.toLowerCase().includes(term) ||
       item.addedAt.toLowerCase().includes(term);
-    const matchesGroup = libraryGroupFilter === "all" || item.group === libraryGroupFilter;
-    const matchesResolution = libraryResolutionFilter === "all" || item.resolution === libraryResolutionFilter;
-    const matchesDuration =
-      libraryDurationFilter === "all" ||
-      (libraryDurationFilter === "short" && /^0{0,1}0:/.test(item.duration)) ||
-      (libraryDurationFilter === "medium" && /^0{0,1}[1-2]:/.test(item.duration)) ||
-      (libraryDurationFilter === "long" && !/^0{0,1}[0-2]:/.test(item.duration));
-    return matchesTerm && matchesGroup && matchesResolution && matchesDuration;
+    const matchesStatus = libraryStatusSelection.length === 0 || libraryStatusSelection.includes(item.metadataStatus);
+    const matchesResolution = libraryResolutionSelection.length === 0 || libraryResolutionSelection.includes(item.resolution);
+    return matchesTerm && matchesStatus && matchesResolution;
   });
 }
 
-export function filterConfigDriveRows(driveLibrary: DriveLibraryItem[], configDriveSearch: string, configDriveGroupFilter: string) {
+export function filterConfigDriveRows(
+  driveLibrary: DriveLibraryItem[],
+  configDriveSearch: string,
+  configDriveStatusSelection: string[],
+  configDriveResolutionSelection: string[]
+) {
   const term = configDriveSearch.trim().toLowerCase();
   return driveLibrary.filter((item) => {
     const matchesTerm =
@@ -51,8 +50,10 @@ export function filterConfigDriveRows(driveLibrary: DriveLibraryItem[], configDr
       item.url.toLowerCase().includes(term) ||
       item.duration.toLowerCase().includes(term) ||
       item.resolution.toLowerCase().includes(term) ||
-      item.size.toLowerCase().includes(term);
-    const matchesGroup = configDriveGroupFilter === "all" || item.group === configDriveGroupFilter;
-    return matchesTerm && matchesGroup;
+      item.size.toLowerCase().includes(term) ||
+      item.metadataStatus.toLowerCase().includes(term);
+    const matchesStatus = configDriveStatusSelection.length === 0 || configDriveStatusSelection.includes(item.metadataStatus);
+    const matchesResolution = configDriveResolutionSelection.length === 0 || configDriveResolutionSelection.includes(item.resolution);
+    return matchesTerm && matchesStatus && matchesResolution;
   });
 }

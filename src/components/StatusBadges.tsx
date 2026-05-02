@@ -1,12 +1,13 @@
-import { CalendarClock, Circle, CircleCheckBig, Cloud, FolderOpen, Play, X } from "lucide-react";
+import { CalendarClock, Circle, CircleCheckBig, FolderOpen, Play, X } from "lucide-react";
+import { GoogleDriveBrandIcon } from "./GoogleDriveBrandIcon";
 import type { StreamJob } from "../types";
 
 export function SourceBadge({ sourceType }: { sourceType: StreamJob["sourceType"] }) {
   const isDrive = sourceType === "drive";
   return (
     <span className={isDrive ? "source-badge drive" : "source-badge local"}>
-      {isDrive ? <Cloud size={12} /> : <FolderOpen size={12} />}
-      {isDrive ? "Google Drive" : "Local"}
+      {isDrive ? <GoogleDriveBrandIcon size={12} /> : <FolderOpen size={12} />}
+      {isDrive ? "Google Drive" : "Local file"}
     </span>
   );
 }

@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  CalendarDays,
   CalendarClock,
   Check,
   Clock3,
@@ -9,7 +10,7 @@ import {
   ChevronLast,
   ChevronLeft,
   ChevronRight,
-  Cloud,
+  FileText,
   History,
   CircleAlert,
   Info,
@@ -19,15 +20,15 @@ import {
   HardDrive,
   MessageCircle,
   Play,
+  Link2,
+  Pencil,
   Settings,
   Plus,
   RefreshCw,
   Search,
-  Sparkles,
   Square,
   Trash2,
   Tv,
-  Upload,
   X,
   XCircle,
   Zap
@@ -36,16 +37,45 @@ import { type MouseEvent, useEffect, useMemo, useState } from "react";
 import { checkFfmpegStatus, pickLocalVideo, probeDriveLink, readReleaseLog, scanDriveFolder, startStreamJob, stopAllStreams, stopStreamJob } from "./api";
 import type { ReleaseLogEntry, StreamEvent, StreamJob } from "./types";
 import releaseLogMarkdown from "../RELEASE.md?raw";
-import { getJobDriveUrls, uniqueDriveUrls, driveFileKey, hasDriveValue, parseDriveLinks, type DriveLibraryItem, type DriveMetadataStatus } from "./features/drive/drive-utils";
+import {
+  driveFileKey,
+  getJobDriveUrls,
+  hasDriveValue,
+  parseDriveLinks,
+  type DriveMetadataStatus,
+  uniqueDriveUrls,
+  type DriveLibraryItem
+} from "./features/drive/drive-utils";
 import { appendDriveLinks, applyGroupToDriveLinks, markDriveMetadataPending, removeDriveLinkById, removeSelectedDriveLinks } from "./features/drive/actions";
 import { persistDriveLibrary, persistJobs, persistTheme, readDriveLibrary, readJobs, readTheme } from "./features/app/storage";
 import { findDueScheduledJob } from "./features/streams/scheduler";
 import { buildCancelledScheduleUpdate, buildScheduledUpdate, buildStoppedUpdate, validateStartJob } from "./features/streams/actions";
 import { filterConfigDriveRows, filterLibraryRows, filterQueueRows } from "./features/streams/selectors";
+import { toneFromSeed } from "./features/streams/dropdown-utils";
 import { useDriveMetadataScanner } from "./features/drive/useDriveMetadataScanner";
 import { now } from "./utils/time";
+import { MultiSelectDropdown } from "./components/MultiSelectDropdown";
+import { GroupApplyDropdown } from "./components/GroupApplyDropdown";
 import { SmartFilterDropdown, type DropdownOption } from "./components/SmartFilterDropdown";
+import { GoogleDriveBrandIcon } from "./components/GoogleDriveBrandIcon";
 import { SourceBadge, StatusBadge } from "./components/StatusBadges";
+
+function driveLibraryMetadataLabel(status: DriveMetadataStatus) {
+  if (status === "scanning") return "Scanning";
+  if (status === "ready") return "Ready";
+  if (status === "partial") return "Partial";
+  if (status === "error") return "No metadata";
+  return "Pending";
+}
+
+/** GPM Profile–style inline status: icon + plain label (no pill). */
+function DriveLibraryMetadataStatusIcon({ status, spinning }: { status: DriveMetadataStatus; spinning: boolean }) {
+  if (status === "ready") return <CheckCircle2 size={13} aria-hidden />;
+  if (status === "scanning") return <RefreshCw size={13} className={spinning ? "spinning" : ""} aria-hidden />;
+  if (status === "partial") return <CircleAlert size={13} aria-hidden />;
+  if (status === "error") return <XCircle size={13} aria-hidden />;
+  return <Clock3 size={13} aria-hidden />;
+}
 
 type Theme = "dark" | "light";
 type View = "streams" | "library";
@@ -133,19 +163,23 @@ export function App() {
   const [lastLibraryPickIndex, setLastLibraryPickIndex] = useState<number | null>(null);
   const [driveDraft, setDriveDraft] = useState("");
   const [driveGroupDraft, setDriveGroupDraft] = useState("Default");
-  const [bulkGroupDraft, setBulkGroupDraft] = useState("Default");
+  const [managedGroups, setManagedGroups] = useState<string[]>(["Default"]);
+  const [groupManagerOpen, setGroupManagerOpen] = useState(false);
+  const [groupSearch, setGroupSearch] = useState("");
+  const [groupDraft, setGroupDraft] = useState("");
+  const [selectedManagedGroup, setSelectedManagedGroup] = useState("Default");
   const [driveFolderDraft, setDriveFolderDraft] = useState("");
   const [driveScanBusy, setDriveScanBusy] = useState(false);
   const [metadataLoadingIds, setMetadataLoadingIds] = useState<string[]>([]);
   const [queueSearch, setQueueSearch] = useState("");
-  const [queueStatusFilter, setQueueStatusFilter] = useState<string[]>(["all"]);
-  const [queueSourceFilter, setQueueSourceFilter] = useState<string[]>(["all"]);
+  const [queueStatusFilter, setQueueStatusFilter] = useState<string[]>([]);
+  const [queueSourceFilter, setQueueSourceFilter] = useState<string[]>([]);
   const [librarySearch, setLibrarySearch] = useState("");
-  const [libraryGroupFilter, setLibraryGroupFilter] = useState("all");
-  const [libraryResolutionFilter, setLibraryResolutionFilter] = useState("all");
-  const [libraryDurationFilter] = useState("all");
+  const [librarySelectedStatuses, setLibrarySelectedStatuses] = useState<string[]>([]);
+  const [librarySelectedResolutions, setLibrarySelectedResolutions] = useState<string[]>([]);
   const [configDriveSearch, setConfigDriveSearch] = useState("");
-  const [configDriveGroupFilter, setConfigDriveGroupFilter] = useState("all");
+  const [configDriveSelectedStatuses, setConfigDriveSelectedStatuses] = useState<string[]>([]);
+  const [configDriveSelectedResolutions, setConfigDriveSelectedResolutions] = useState<string[]>([]);
   const [queuePage, setQueuePage] = useState(1);
   const [queuePageSize, setQueuePageSize] = useState(20);
   const [libraryPage, setLibraryPage] = useState(1);
@@ -154,6 +188,12 @@ export function App() {
   const [showVersionLog, setShowVersionLog] = useState(false);
   const [versionLogEntries, setVersionLogEntries] = useState<ReleaseLogEntry[]>(() => VERSION_LOG_FALLBACK);
   const [lastDrivePickIndex, setLastDrivePickIndex] = useState<number | null>(null);
+  const [libraryDragging, setLibraryDragging] = useState(false);
+  const [libraryDragAnchorIndex, setLibraryDragAnchorIndex] = useState<number | null>(null);
+  const [libraryDragAdditive, setLibraryDragAdditive] = useState(false);
+  const [drivePickerDragging, setDrivePickerDragging] = useState(false);
+  const [drivePickerDragAnchorIndex, setDrivePickerDragAnchorIndex] = useState<number | null>(null);
+  const [drivePickerDragAdditive, setDrivePickerDragAdditive] = useState(false);
 
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || jobs[0];
   const selectedJobDriveUrls = getJobDriveUrls(selectedJob);
@@ -171,21 +211,36 @@ export function App() {
     () => Array.from(new Set(driveLibrary.map((item) => item.resolution).filter((value) => value && value !== "-"))),
     [driveLibrary]
   );
-  const libraryGroupOptions = useMemo(
-    () => Array.from(new Set(driveLibrary.map((item) => item.group).filter((value) => value && value !== "-"))),
-    [driveLibrary]
-  );
+  const libraryGroupOptions = useMemo(() => Array.from(new Set(driveLibrary.map((item) => item.group).filter((value) => value && value !== "-"))), [driveLibrary]);
+  const mergedGroupOptions = useMemo(() => Array.from(new Set(["Default", ...managedGroups, ...libraryGroupOptions])), [libraryGroupOptions, managedGroups]);
+  const groupManagerRows = useMemo(() => {
+    const term = groupSearch.trim().toLowerCase();
+    return mergedGroupOptions
+      .map((group) => ({
+        group,
+        count: driveLibrary.filter((item) => (item.group || "Default") === group).length,
+        updatedAt:
+          driveLibrary.find((item) => (item.group || "Default") === group)?.addedAt ||
+          "-"
+      }))
+      .filter((row) => !term || row.group.toLowerCase().includes(term));
+  }, [driveLibrary, groupSearch, mergedGroupOptions]);
   const libraryRows = useMemo(
-    () => filterLibraryRows(driveLibrary, librarySearch, libraryGroupFilter, libraryResolutionFilter, libraryDurationFilter),
-    [driveLibrary, libraryDurationFilter, libraryGroupFilter, libraryResolutionFilter, librarySearch]
+    () => filterLibraryRows(driveLibrary, librarySearch, librarySelectedStatuses, librarySelectedResolutions),
+    [driveLibrary, librarySearch, librarySelectedResolutions, librarySelectedStatuses]
   );
   const libraryTotalPages = Math.max(1, Math.ceil(libraryRows.length / libraryPageSize));
   const libraryPageStart = (libraryPage - 1) * libraryPageSize;
   const libraryPageEnd = Math.min(libraryPageStart + libraryPageSize, libraryRows.length);
   const libraryPagedRows = libraryRows.slice(libraryPageStart, libraryPageEnd);
-  const configDriveRows = useMemo(() => filterConfigDriveRows(driveLibrary, configDriveSearch, configDriveGroupFilter), [configDriveGroupFilter, configDriveSearch, driveLibrary]);
+  const configDriveRows = useMemo(
+    () => filterConfigDriveRows(driveLibrary, configDriveSearch, configDriveSelectedStatuses, configDriveSelectedResolutions),
+    [configDriveSearch, configDriveSelectedResolutions, configDriveSelectedStatuses, driveLibrary]
+  );
   const metadataReadyCount = driveLibrary.filter((item) => item.metadataStatus === "ready" || item.metadataStatus === "partial").length;
   const selectedLibraryCount = selectedDriveIds.size;
+  const selectedSourceCount = selectedJob ? (selectedJob.sourceType === "drive" ? selectedJobDriveUrls.length : selectedJob.localPath.trim() ? 1 : 0) : 0;
+  const selectedSourceLabel = `${selectedSourceCount} video${selectedSourceCount === 1 ? "" : "s"} selected`;
 
   useEffect(() => {
     persistTheme(theme);
@@ -219,6 +274,54 @@ export function App() {
   }, [jobs, selectedJobId]);
 
   useEffect(() => {
+    setManagedGroups((current) => Array.from(new Set(["Default", ...current, ...libraryGroupOptions])));
+  }, [libraryGroupOptions]);
+
+  useEffect(() => {
+    if (!drivePickerDragging && !libraryDragging) return;
+    const stopDragging = () => {
+      setDrivePickerDragging(false);
+      setDrivePickerDragAnchorIndex(null);
+      setDrivePickerDragAdditive(false);
+      setLibraryDragging(false);
+      setLibraryDragAnchorIndex(null);
+      setLibraryDragAdditive(false);
+    };
+    window.addEventListener("mouseup", stopDragging);
+    return () => window.removeEventListener("mouseup", stopDragging);
+  }, [drivePickerDragging, libraryDragging]);
+
+  useEffect(() => {
+    if (view !== "library" || drivePickerOpen || driveModalOpen || groupManagerOpen) return;
+    const handleLibraryHotkeys = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "a") return;
+      if (selectedDriveIds.size === 0) return;
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+      event.preventDefault();
+      setSelectedDriveIds(new Set(libraryRows.map((item) => item.id)));
+      setSelectedDriveId(libraryRows[0]?.id || "");
+      setLastLibraryPickIndex(libraryRows.length > 0 ? libraryRows.length - 1 : null);
+    };
+    window.addEventListener("keydown", handleLibraryHotkeys);
+    return () => window.removeEventListener("keydown", handleLibraryHotkeys);
+  }, [driveModalOpen, drivePickerOpen, groupManagerOpen, libraryRows, selectedDriveIds.size, view]);
+
+  useEffect(() => {
+    if (!drivePickerOpen || !selectedJob) return;
+    const handlePickerHotkeys = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "a") return;
+      event.preventDefault();
+      updateSelectedDriveUrls(configDriveRows.map((item) => item.url));
+      setLastDrivePickIndex(configDriveRows.length > 0 ? configDriveRows.length - 1 : null);
+    };
+    window.addEventListener("keydown", handlePickerHotkeys);
+    return () => window.removeEventListener("keydown", handlePickerHotkeys);
+  // updateSelectedDriveUrls is intentionally omitted to keep this hotkey listener stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configDriveRows, drivePickerOpen, selectedJob]);
+
+  useEffect(() => {
     setQueuePage(1);
   }, [queueSearch, queueSourceFilter, queueStatusFilter]);
 
@@ -228,7 +331,7 @@ export function App() {
 
   useEffect(() => {
     setLibraryPage(1);
-  }, [librarySearch, libraryGroupFilter, libraryResolutionFilter, libraryDurationFilter]);
+  }, [librarySearch, librarySelectedResolutions, librarySelectedStatuses]);
 
   useEffect(() => {
     if (libraryPage > libraryTotalPages) setLibraryPage(libraryTotalPages);
@@ -447,24 +550,39 @@ export function App() {
     setDriveModalOpen(false);
   }
 
-  function applyDriveLibraryItem(item: DriveLibraryItem, rowIndex: number, event?: MouseEvent<HTMLTableRowElement>) {
-    if (event?.shiftKey && lastDrivePickIndex !== null) {
-      const start = Math.min(lastDrivePickIndex, rowIndex);
-      const end = Math.max(lastDrivePickIndex, rowIndex);
-      const rangeUrls = configDriveRows.slice(start, end + 1).map((entry) => entry.url);
-      if (event.metaKey || event.ctrlKey) {
-        updateSelectedDriveUrls([...selectedJobDriveUrls, ...rangeUrls]);
-      } else {
-        updateSelectedDriveUrls(rangeUrls);
-      }
-      setSelectedDriveId(item.id);
-      setLastDrivePickIndex(rowIndex);
+  function selectDrivePickerRange(anchorIndex: number, rowIndex: number, additive: boolean) {
+    const start = Math.min(anchorIndex, rowIndex);
+    const end = Math.max(anchorIndex, rowIndex);
+    const rangeUrls = configDriveRows.slice(start, end + 1).map((entry) => entry.url);
+    if (additive) {
+      updateSelectedDriveUrls([...selectedJobDriveUrls, ...rangeUrls]);
       return;
     }
+    updateSelectedDriveUrls(rangeUrls);
+  }
 
-    const key = driveFileKey(item.url);
-    const nextUrls = selectedJobDriveKeys.has(key) ? selectedJobDriveUrls.filter((url) => driveFileKey(url) !== key) : [...selectedJobDriveUrls, item.url];
-    updateSelectedDriveUrls(nextUrls);
+  function applyDriveLibraryItem(item: DriveLibraryItem, rowIndex: number, event: MouseEvent<HTMLTableRowElement>) {
+    const additive = event.metaKey || event.ctrlKey;
+    event.preventDefault();
+    if (event.shiftKey && lastDrivePickIndex !== null) {
+      selectDrivePickerRange(lastDrivePickIndex, rowIndex, additive);
+    } else if (additive) {
+      const key = driveFileKey(item.url);
+      const nextUrls = selectedJobDriveKeys.has(key) ? selectedJobDriveUrls.filter((url) => driveFileKey(url) !== key) : [...selectedJobDriveUrls, item.url];
+      updateSelectedDriveUrls(nextUrls);
+    } else {
+      updateSelectedDriveUrls([item.url]);
+    }
+    setDrivePickerDragging(true);
+    setDrivePickerDragAnchorIndex(rowIndex);
+    setDrivePickerDragAdditive(additive);
+    setSelectedDriveId(item.id);
+    setLastDrivePickIndex(rowIndex);
+  }
+
+  function extendDrivePickerSelection(item: DriveLibraryItem, rowIndex: number) {
+    if (!drivePickerDragging || drivePickerDragAnchorIndex === null) return;
+    selectDrivePickerRange(drivePickerDragAnchorIndex, rowIndex, drivePickerDragAdditive);
     setSelectedDriveId(item.id);
     setLastDrivePickIndex(rowIndex);
   }
@@ -480,7 +598,7 @@ export function App() {
         setError(result.message);
         return;
       }
-      setDriveDraft((current) => [...parseDriveLinks(current), ...result.links].join("\n"));
+      setDriveDraft((current) => uniqueDriveUrls([...parseDriveLinks(current), ...result.links]).join("\n"));
       addLog("success", result.message);
     } catch (scanError) {
       setError(scanError instanceof Error ? scanError.message : "Unable to scan Drive folder.");
@@ -506,42 +624,100 @@ export function App() {
     setSelectedDriveIds(new Set());
   }
 
-  function applyGroupToSelectedDriveLinks() {
-    const group = bulkGroupDraft.trim();
+  function applyGroupToSelectedDriveLinks(groupName?: string) {
+    const group = (groupName || selectedManagedGroup).trim();
     if (!group || selectedDriveIds.size === 0) return;
     setDriveLibrary((items) => applyGroupToDriveLinks(items, selectedDriveIds, group));
   }
 
-  function handleLibraryRowSelection(itemId: string, rowIndex: number, event?: MouseEvent<HTMLTableRowElement>) {
-    if (event?.shiftKey && lastLibraryPickIndex !== null) {
-      const start = Math.min(lastLibraryPickIndex, rowIndex);
-      const end = Math.max(lastLibraryPickIndex, rowIndex);
-      const rangeIds = libraryPagedRows.slice(start, end + 1).map((item) => item.id);
-      setSelectedDriveIds((current) => {
-        const next = event.metaKey || event.ctrlKey ? new Set(current) : new Set<string>();
-        rangeIds.forEach((id) => next.add(id));
-        return next;
-      });
+  function applyGroupsToSelectedDriveLinks(groups: string[]) {
+    const nextGroups = groups.map((group) => group.trim()).filter(Boolean);
+    if (nextGroups.length === 0 || selectedDriveIds.size === 0) return;
+    const selectedIdsInOrder = libraryRows.map((item) => item.id).filter((id) => selectedDriveIds.has(id));
+    if (selectedIdsInOrder.length === 0) return;
+    const groupMap = new Map<string, string>();
+    selectedIdsInOrder.forEach((id, index) => {
+      groupMap.set(id, nextGroups[index % nextGroups.length]);
+    });
+    setDriveLibrary((items) => items.map((item) => (groupMap.has(item.id) ? { ...item, group: groupMap.get(item.id) || item.group } : item)));
+    setSelectedManagedGroup(nextGroups[0]);
+    setDriveGroupDraft(nextGroups[0]);
+  }
+
+  function addManagedGroup() {
+    const nextGroup = groupDraft.trim();
+    if (!nextGroup) return;
+    setManagedGroups((groups) => Array.from(new Set([...groups, nextGroup])));
+    setSelectedManagedGroup(nextGroup);
+    setDriveGroupDraft(nextGroup);
+    setGroupDraft("");
+  }
+
+  function renameManagedGroup() {
+    const nextGroup = groupDraft.trim();
+    if (!nextGroup || !selectedManagedGroup || selectedManagedGroup === "Default") return;
+    const fromGroup = selectedManagedGroup;
+    setManagedGroups((groups) => Array.from(new Set(groups.map((group) => (group === fromGroup ? nextGroup : group)))));
+    setDriveLibrary((items) => items.map((item) => ((item.group || "Default") === fromGroup ? { ...item, group: nextGroup } : item)));
+    if (driveGroupDraft === fromGroup) setDriveGroupDraft(nextGroup);
+    setSelectedManagedGroup(nextGroup);
+    setGroupDraft("");
+  }
+
+  function deleteManagedGroup() {
+    if (!selectedManagedGroup || selectedManagedGroup === "Default") return;
+    const targetGroup = selectedManagedGroup;
+    setManagedGroups((groups) => groups.filter((group) => group !== targetGroup));
+    setDriveLibrary((items) => items.map((item) => ((item.group || "Default") === targetGroup ? { ...item, group: "Default" } : item)));
+    if (driveGroupDraft === targetGroup) setDriveGroupDraft("Default");
+    setSelectedManagedGroup("Default");
+  }
+
+  function selectLibraryRange(anchorIndex: number, rowIndex: number, additive: boolean) {
+    const start = Math.min(anchorIndex, rowIndex);
+    const end = Math.max(anchorIndex, rowIndex);
+    const rangeIds = libraryPagedRows.slice(start, end + 1).map((item) => item.id);
+    setSelectedDriveIds((current) => {
+      const next = additive ? new Set(current) : new Set<string>();
+      rangeIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  function handleLibraryRowSelection(itemId: string, rowIndex: number, event: MouseEvent<HTMLTableRowElement>) {
+    event.preventDefault();
+    const additive = event.metaKey || event.ctrlKey;
+    if (event.shiftKey && lastLibraryPickIndex !== null) {
+      selectLibraryRange(lastLibraryPickIndex, rowIndex, additive);
       setSelectedDriveId(itemId);
       setLastLibraryPickIndex(rowIndex);
+      setLibraryDragging(true);
+      setLibraryDragAnchorIndex(lastLibraryPickIndex);
+      setLibraryDragAdditive(additive);
       return;
     }
 
     setSelectedDriveIds((current) => {
       const next = new Set(current);
-      if (event?.metaKey || event?.ctrlKey) {
+      if (additive) {
         if (next.has(itemId)) next.delete(itemId);
         else next.add(itemId);
       } else {
-        if (next.size === 1 && next.has(itemId)) {
-          next.clear();
-        } else {
-          next.clear();
-          next.add(itemId);
-        }
+        next.clear();
+        next.add(itemId);
       }
       return next;
     });
+    setSelectedDriveId(itemId);
+    setLastLibraryPickIndex(rowIndex);
+    setLibraryDragging(true);
+    setLibraryDragAnchorIndex(rowIndex);
+    setLibraryDragAdditive(additive);
+  }
+
+  function extendLibraryRowSelection(itemId: string, rowIndex: number) {
+    if (!libraryDragging || libraryDragAnchorIndex === null) return;
+    selectLibraryRange(libraryDragAnchorIndex, rowIndex, libraryDragAdditive);
     setSelectedDriveId(itemId);
     setLastLibraryPickIndex(rowIndex);
   }
@@ -563,27 +739,17 @@ export function App() {
     setDriveLibrary((items) => items.map((item) => markDriveMetadataPending(item)));
   }
 
-  function metadataStatusLabel(status: DriveMetadataStatus) {
-    if (status === "scanning") return "Scanning";
-    if (status === "ready") return "Ready";
-    if (status === "partial") return "Partial";
-    if (status === "error") return "No metadata";
-    return "Pending";
-  }
-
   const ffmpegPillClass = ffmpegStatus === "ok" ? "connected" : ffmpegStatus === "missing" ? "offline" : "";
   const ffmpegPillLabel = ffmpegStatus === "ok" ? "ffmpeg ready" : ffmpegStatus === "missing" ? "ffmpeg missing" : "checking ffmpeg";
-  const queueStatusOptions: DropdownOption[] = [
-    { value: "all", label: "All", tone: "all" },
-    { value: "idle", label: "Ready", tone: "idle" },
-    { value: "running", label: "Running", tone: "running" },
-    { value: "scheduled", label: "Schedule", tone: "scheduled" },
-    { value: "failed", label: "Failed", tone: "failed" }
+  const queueStatusOptions = [
+    { value: "idle", label: "Ready", tone: "ready" as const },
+    { value: "running", label: "Running", tone: "running" as const },
+    { value: "scheduled", label: "Schedule", tone: "opening" as const },
+    { value: "failed", label: "Failed", tone: "failed" as const }
   ];
-  const queueSourceOptions: DropdownOption[] = [
-    { value: "all", label: "All", tone: "all" },
-    { value: "local", label: "Local file", tone: "local" },
-    { value: "drive", label: "Google Drive", tone: "drive" }
+  const queueSourceOptions = [
+    { value: "local", label: "Local file", tone: "local" as const },
+    { value: "drive", label: "Google Drive", tone: "drive" as const }
   ];
   const sourceTypeOptions: DropdownOption[] = [
     { value: "local", label: "Local file", tone: "local" },
@@ -597,20 +763,28 @@ export function App() {
     { value: "immediate", label: "Publish now", tone: "running" },
     { value: "scheduled", label: "Schedule", tone: "scheduled" }
   ];
-  const tablePageSizeDropdownOptions: DropdownOption[] = TABLE_PAGE_SIZE_OPTIONS.map((size) => ({
-    value: String(size),
-    label: `${size}`
-  }));
-  const libraryResolutionDropdownOptions: DropdownOption[] = [
-    { value: "all", label: "All" },
-    ...libraryResolutionOptions.map((resolution) => ({ value: resolution, label: resolution }))
-  ];
-  const libraryGroupDropdownOptions: DropdownOption[] = [
-    { value: "all", label: "All" },
-    ...libraryGroupOptions.map((group) => ({ value: group, label: group }))
-  ];
+  const libraryDriveMetadataStatusFilterOptions = useMemo(
+    () => [
+      { value: "pending", label: "Pending", tone: "pending" as const },
+      { value: "scanning", label: "Scanning", tone: "scanning" as const },
+      { value: "ready", label: "Ready", tone: "ready" as const },
+      { value: "partial", label: "Partial", tone: "partial" as const },
+      { value: "error", label: "No metadata", tone: "failed" as const }
+    ],
+    []
+  );
+  const libraryDriveResolutionFilterOptions = useMemo(
+    () =>
+      libraryResolutionOptions.map((resolution) => ({
+        value: resolution,
+        label: resolution,
+        tone: "platform" as const,
+        dotTone: toneFromSeed(`drive-resolution:${resolution}`)
+      })),
+    [libraryResolutionOptions]
+  );
   return (
-    <div className={`shell theme-${theme}`}>
+    <div className={`app-shell theme-${theme}`}>
       <aside className="sidebar">
         <div className="brand-mark">YT</div>
         <nav>
@@ -618,7 +792,7 @@ export function App() {
             <Tv size={18} />
           </button>
           <button className={view === "library" ? "active" : ""} title="Drive Library" onClick={() => setView("library")}>
-            <Sparkles size={18} />
+            <GoogleDriveBrandIcon size={18} />
           </button>
         </nav>
         <div className={`api-dot ${ffmpegStatus === "ok" ? "connected" : ffmpegStatus === "missing" ? "offline" : "checking"}`}>
@@ -626,7 +800,7 @@ export function App() {
         </div>
       </aside>
 
-      <main className="workspace">
+      <main className="workspace shell">
         <header className="topbar">
           <div className="topbar-title">
             <h1>{view === "streams" ? "YouTube Multistream Console" : "Drive Library"}</h1>
@@ -661,25 +835,11 @@ export function App() {
         {view === "streams" && (
           <section className="layout">
           <div className="left-pane card">
-            <div className="pane-head">
+            <div className="table-header-top">
               <h2>Channel Queue</h2>
-              <div className="inline-row">
-                <span>{jobs.length} channels</span>
-                <button className="primary slim-button" onClick={addJob}>
-                  <Plus size={14} />
-                  New
-                </button>
-                <button className="ghost slim-button" onClick={copySelectedJob} disabled={!selectedJob}>
-                  <Copy size={14} />
-                  Copy
-                </button>
-                <button className="danger slim-button" onClick={deleteSelectedJob} disabled={!selectedJob || jobs.length <= 1}>
-                  <Trash2 size={14} />
-                  Delete
-                </button>
-              </div>
+              <span>{queueRows.length} of {jobs.length} channels</span>
             </div>
-            <div className="metrics">
+            <div className="metrics table-header-stats">
               <div className="metric-card">
                 <span className="metric-icon metric-ready">
                   <CircleCheckBig size={12} />
@@ -717,58 +877,97 @@ export function App() {
                 </div>
               </div>
             </div>
-            <div className="queue-filters">
+            <div className="queue-filters table-header-filters profile-filters">
               <label className="input with-icon">
                 <Search size={15} />
                 <input value={queueSearch} onChange={(event) => setQueueSearch(event.target.value)} placeholder="Search channels" />
               </label>
-              <SmartFilterDropdown value={queueStatusFilter} options={queueStatusOptions} label="Status" searchLabel="Search status..." multiple onChange={(value) => setQueueStatusFilter(Array.isArray(value) ? value : [value])} />
-              <SmartFilterDropdown
-                value={queueSourceFilter}
+              <MultiSelectDropdown
+                values={queueStatusFilter}
+                options={queueStatusOptions}
+                label="Status"
+                searchLabel="Search statuses..."
+                summaryLabel="statuses"
+                defaultTone="status"
+                onChange={setQueueStatusFilter}
+              />
+              <MultiSelectDropdown
+                values={queueSourceFilter}
                 options={queueSourceOptions}
                 label="Source"
-                searchLabel="Search source..."
-                multiple
-                onChange={(value) => setQueueSourceFilter(Array.isArray(value) ? value : [value])}
+                searchLabel="Search sources..."
+                summaryLabel="sources"
+                defaultTone="source"
+                onChange={setQueueSourceFilter}
               />
             </div>
+            <div className="table-header-actions profile-table-header-actions">
+              <div className="profile-table-header-buttons">
+                <button className="ghost compact profile-header-btn-run" onClick={startAll} disabled={busy || ffmpegStatus !== "ok"}>
+                  <Play size={14} />
+                  Run
+                </button>
+                <button className="ghost compact profile-header-btn-close" onClick={stopAll}>
+                  <Square size={12} />
+                  Close
+                </button>
+                <button className="ghost compact profile-header-btn-new" onClick={addJob}>
+                  <Plus size={14} />
+                  New
+                </button>
+                <button className="ghost compact profile-header-btn-delete" onClick={deleteSelectedJob} disabled={!selectedJob || jobs.length <= 1}>
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              </div>
+              <div className="profile-table-header-summary">
+                <button className="icon-only" onClick={() => setSelectedJobId("")} title="Clear selection" disabled={!selectedJob}>
+                  <X size={16} />
+                </button>
+                <span>{selectedJob ? "1 selected" : "0 selected"}</span>
+                <button className="ghost compact" onClick={copySelectedJob} disabled={!selectedJob}>
+                  <Copy size={14} />
+                  Copy
+                </button>
+              </div>
+            </div>
             <div className="job-list">
-              <div className="table-scroll">
-              <table className="queue-table">
+              <div className="table-scroll table-wrap">
+              <table className="queue-table row-select-table">
                 <thead>
                   <tr>
                     <th>
-                      <span className="col-head">
+                      <span className="table-col-head table-col-profile">
                         <Tv size={13} />
                         Channel
                       </span>
                     </th>
                     <th>
-                      <span className="col-head">
+                      <span className="table-col-head table-col-group">
                         <HardDrive size={13} />
                         Source
                       </span>
                     </th>
                     <th>
-                      <span className="col-head">
+                      <span className="table-col-head table-col-status">
                         <CircleCheckBig size={13} />
                         Status
                       </span>
                     </th>
                     <th>
-                      <span className="col-head">
+                      <span className="table-col-head table-col-note">
                         <MessageCircle size={13} />
                         Last message
                       </span>
                     </th>
                     <th>
-                      <span className="col-head">
+                      <span className="table-col-head table-col-proxy">
                         <Clock3 size={13} />
                         Updated
                       </span>
                     </th>
                     <th className="action-col">
-                      <span className="col-head">
+                      <span className="table-col-head table-col-actions">
                         <Settings size={13} />
                         Actions
                       </span>
@@ -799,15 +998,24 @@ export function App() {
                         }}
                         className="queue-actions"
                       >
-                        <button className="icon-action run-action" title="Start channel" onClick={() => startOne(job)} disabled={busy || ffmpegStatus !== "ok"}>
-                          <Play size={12} />
-                        </button>
-                        <button className="icon-action stop-action" title="Stop channel" onClick={() => stopOne(job.id)}>
-                          <Square size={11} />
-                        </button>
+                        <div className="table-action-icons">
+                          <button className="table-action-btn table-action-run" title="Start channel" aria-label="Start channel" onClick={() => startOne(job)} disabled={busy || ffmpegStatus !== "ok"}>
+                            <Play size={12} />
+                          </button>
+                          <button className="table-action-btn table-action-close" title="Stop channel" aria-label="Stop channel" onClick={() => stopOne(job.id)}>
+                            <Square size={11} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
+                  {queueRows.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="library-empty">
+                        No channels match current filters.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
               </div>
@@ -835,31 +1043,18 @@ export function App() {
                   </button>
                 </div>
                 <div className="pagination-meta">
-                  <span>
-                    {queueRows.length === 0 ? "0" : queuePageStart + 1}-{queuePageEnd} of {queueRows.length} channels
-                  </span>
                   <label>
                     Rows per page
-                    <SmartFilterDropdown
-                      value={String(queuePageSize)}
-                      options={tablePageSizeDropdownOptions}
-                      label="Rows per page"
-                      searchLabel="Search page size..."
-                      onChange={(value) => setQueuePageSize(Number(value))}
-                    />
+                    <select value={queuePageSize} onChange={(event) => setQueuePageSize(Number(event.target.value))}>
+                      {TABLE_PAGE_SIZE_OPTIONS.map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
               </div>
-            </div>
-            <div className="pane-actions">
-              <button className="run" onClick={startAll} disabled={busy || ffmpegStatus !== "ok"}>
-                <Play size={14} />
-                Start all
-              </button>
-              <button className="stop" onClick={stopAll}>
-                <Square size={12} />
-                Stop all
-              </button>
             </div>
           </div>
 
@@ -878,12 +1073,12 @@ export function App() {
                         <HardDrive size={13} />
                         Source Settings
                       </h3>
-                      <div className="source-basic-grid">
-                        <label>
+                      <div className="source-settings-top-row">
+                        <label className="source-settings-cell source-channel-field">
                           Channel name
                           <input value={selectedJob.channelName} onChange={(event) => updateSelectedJob({ channelName: event.target.value })} />
                         </label>
-                        <label className="source-type-field">
+                        <label className="source-settings-cell source-type-field">
                           Source type
                           <SmartFilterDropdown
                             value={selectedJob.sourceType}
@@ -893,55 +1088,39 @@ export function App() {
                             onChange={(value) => updateSelectedJob({ sourceType: value as StreamJob["sourceType"] })}
                           />
                         </label>
-                        <label className="run-mode-field">
-                          Run mode
-                          <SmartFilterDropdown
-                            value={selectedJob.drivePlayMode || "sequential"}
-                            options={drivePlayModeOptions}
-                            label="Run mode"
-                            searchLabel="Search mode..."
-                            onChange={(value) => updateSelectedJob({ drivePlayMode: value as StreamJob["drivePlayMode"] })}
-                          />
-                        </label>
-                      </div>
-                      {selectedJob.sourceType === "local" ? (
-                        <div className="source-details-area">
-                          <label className="source-local-field">
-                            Local file path
-                            <div className="inline-row">
-                              <input value={selectedJob.localPath} onChange={(event) => updateSelectedJob({ localPath: event.target.value })} placeholder="D:\\videos\\sample.mp4" />
-                              <button className="ghost slim-button" onClick={pickSourceFile}>
-                                <Upload size={14} />
-                                Pick
-                              </button>
-                            </div>
-                          </label>
-                        </div>
-                      ) : (
-                        <div className="source-details-area">
-                          <div className="drive-config-picker">
-                            <div className="field-label icon-label">
-                              <Cloud size={13} />
-                              Google Drive URLs
-                            </div>
-                            <div className="drive-url-row">
-                              <input
-                                value={selectedJob.driveUrl}
-                                onChange={(event) => updateSelectedJob({ driveUrl: event.target.value })}
-                                placeholder="https://drive.google.com/file/d/FILE_ID/view"
-                              />
-                              <button className="ghost slim-button" onClick={() => setDrivePickerOpen(true)}>
-                                <Files size={14} />
-                                Choose from Drive Library
-                              </button>
-                              <span className="drive-selected-chip drive-selection-inline">
-                                <Cloud size={12} />
-                                <span>{selectedJobDriveUrls.length}/{driveLibrary.length} videos selected</span>
-                              </span>
-                            </div>
+                        <div className="source-settings-cell source-choose-cell">
+                          <span className="source-settings-field-label">Choose source</span>
+                          <div className="source-choose-row">
+                            <button
+                              type="button"
+                              className="ghost slim-button source-choose-btn"
+                              onClick={() => {
+                                if (selectedJob.sourceType === "drive") {
+                                  setDrivePickerOpen(true);
+                                  return;
+                                }
+                                void pickSourceFile();
+                              }}
+                            >
+                              <Files size={14} />
+                              {selectedJob.sourceType === "drive" ? "Choose from Drive..." : "Choose from Local..."}
+                            </button>
+                            <span className="source-selection-meta" role="status" aria-live="polite" title={selectedSourceLabel}>
+                              {selectedSourceLabel}
+                            </span>
                           </div>
                         </div>
-                      )}
+                      </div>
+                      <label className="run-mode-field drive-run-mode-field">
+                        Run mode
+                        <SmartFilterDropdown
+                          value={selectedJob.drivePlayMode || "sequential"}
+                          options={drivePlayModeOptions}
+                          label="Run mode"
+                          searchLabel="Search mode..."
+                          onChange={(value) => updateSelectedJob({ drivePlayMode: value as StreamJob["drivePlayMode"] })}
+                        />
+                      </label>
                     </section>
 
                     <section className="config-frame">
@@ -1088,37 +1267,18 @@ export function App() {
           </section>
         )}
         {view === "library" && (
-          <section className="library-layout card">
-            <div className="pane-head">
+          <section className="library-layout card shell">
+            <header className="table-header-top library-table-header-top">
               <h2>Drive Library</h2>
-              <div className="inline-row">
-                <span>{libraryRows.length} of {driveLibrary.length} items</span>
-                <button className="primary slim-button" onClick={() => setDriveModalOpen(true)}>
-                  <Plus size={14} />
-                  Add
-                </button>
-                <button className="ghost slim-button" onClick={refreshAllDriveMetadata} disabled={driveLibrary.length === 0}>
-                  <RefreshCw size={14} />
-                  Refresh
-                </button>
-                <input value={bulkGroupDraft} onChange={(event) => setBulkGroupDraft(event.target.value)} placeholder="Group name" list="drive-groups" />
-                <button className="ghost slim-button" onClick={applyGroupToSelectedDriveLinks} disabled={selectedLibraryCount === 0 || !bulkGroupDraft.trim()}>
-                  <FolderOpen size={14} />
-                  Apply group
-                </button>
-                <button className="danger slim-button" onClick={removeSelectedDriveLink} disabled={selectedLibraryCount === 0}>
-                  <Trash2 size={14} />
-                  Delete ({selectedLibraryCount})
-                </button>
-              </div>
-            </div>
-            <div className="metrics">
+              <span>{libraryRows.length} of {driveLibrary.length} items</span>
+            </header>
+            <div className="metrics table-header-stats">
               <div className="metric-card">
-                <span className="metric-icon metric-ready">
-                  <HardDrive size={12} />
+                <span className="metric-icon metric-ready metric-drive-brand">
+                  <GoogleDriveBrandIcon size={23} className="drive-brand-metric" title="Google Drive" />
                 </span>
                 <div className="metric-content">
-                  <span className="metric-label">Drive Links</span>
+                  <span className="metric-label">Drive links</span>
                   <strong className="metric-value">{driveLibrary.length}</strong>
                 </div>
               </div>
@@ -1136,8 +1296,8 @@ export function App() {
                   <Files size={12} />
                 </span>
                 <div className="metric-content">
-                  <span className="metric-label">Groups</span>
-                  <strong className="metric-value">{libraryGroupOptions.length}</strong>
+                  <span className="metric-label">Resolutions</span>
+                  <strong className="metric-value">{libraryResolutionOptions.length}</strong>
                 </div>
               </div>
               <div className="metric-card">
@@ -1150,69 +1310,113 @@ export function App() {
                 </div>
               </div>
             </div>
-            <div className="library-toolbar">
+            <div className="table-header-actions profile-table-header-actions">
+              <div className="profile-table-header-buttons drive-library-actions">
+                <button className="ghost compact profile-header-btn-new" onClick={() => setDriveModalOpen(true)}>
+                  <Plus size={14} />
+                  New
+                </button>
+                <button className="ghost compact profile-header-btn-close" onClick={removeSelectedDriveLink} disabled={selectedLibraryCount === 0}>
+                  <Trash2 size={14} />
+                  Delete ({selectedLibraryCount})
+                </button>
+                <button className="ghost compact profile-header-btn-new" onClick={refreshAllDriveMetadata} disabled={driveLibrary.length === 0}>
+                  <RefreshCw size={14} />
+                  Refresh
+                </button>
+                <button className="ghost compact profile-header-btn-delete" onClick={() => setGroupManagerOpen(true)}>
+                  <FolderOpen size={14} />
+                  Manage Group
+                </button>
+                <div className="drive-library-apply-group">
+                  <GroupApplyDropdown
+                    groups={mergedGroupOptions}
+                    selectedRowsCount={selectedLibraryCount}
+                    onApply={applyGroupsToSelectedDriveLinks}
+                    onManage={() => setGroupManagerOpen(true)}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="library-toolbar table-header-filters profile-filters">
               <label className="input with-icon">
                 <Search size={15} />
-                <input value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder="Search file, group, metadata, Drive link..." />
+                <input value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder="Search file, group, Drive link…" />
               </label>
-              <SmartFilterDropdown
-                value={libraryGroupFilter}
-                options={libraryGroupDropdownOptions}
-                label="Group"
-                searchLabel="Search groups..."
-                onChange={setLibraryGroupFilter}
+              <MultiSelectDropdown
+                values={librarySelectedStatuses}
+                options={libraryDriveMetadataStatusFilterOptions}
+                label="Status"
+                searchLabel="Search statuses…"
+                summaryLabel="statuses"
+                defaultTone="status"
+                onChange={setLibrarySelectedStatuses}
               />
-              <SmartFilterDropdown
-                value={libraryResolutionFilter}
-                options={libraryResolutionDropdownOptions}
+              <MultiSelectDropdown
+                values={librarySelectedResolutions}
+                options={libraryDriveResolutionFilterOptions}
                 label="Resolution"
-                searchLabel="Search resolutions..."
-                onChange={setLibraryResolutionFilter}
+                searchLabel="Search resolutions…"
+                summaryLabel="resolutions"
+                defaultTone="platform"
+                onChange={setLibrarySelectedResolutions}
               />
             </div>
             <div className="library-table-wrap">
-              <div className="table-scroll">
-              <table className="queue-table library-table">
+              <div className="table-scroll table-wrap">
+              <table className="queue-table library-table row-select-table">
                 <thead>
                   <tr>
-                    <th>
-                      <span className="col-head">
-                        <HardDrive size={13} />
-                        File / Drive Link
+                    <th scope="col">
+                      <span className="table-col-head table-col-profile">
+                        <FileText size={13} />
+                        File
                       </span>
                     </th>
-                    <th>
-                      <span className="col-head">
+                    <th scope="col">
+                      <span className="table-col-head table-col-drive drive-brand-col-head">
+                        <Link2 size={13} />
+                        Drive link
+                      </span>
+                    </th>
+                    <th scope="col">
+                      <span className="table-col-head table-col-status">
                         <CircleCheckBig size={13} />
                         Status
                       </span>
                     </th>
-                    <th>
-                      <span className="col-head">
+                    <th scope="col">
+                      <span className="table-col-head table-col-group">
                         <FolderOpen size={13} />
                         Group
                       </span>
                     </th>
-                    <th>
-                      <span className="col-head">
+                    <th scope="col">
+                      <span className="table-col-head">
+                        <CalendarDays size={13} />
+                        Added
+                      </span>
+                    </th>
+                    <th scope="col">
+                      <span className="table-col-head table-col-proxy">
                         <Clock3 size={13} />
                         Duration
                       </span>
                     </th>
-                    <th>
-                      <span className="col-head">
+                    <th scope="col">
+                      <span className="table-col-head table-col-note">
                         <Tv size={13} />
                         Resolution
                       </span>
                     </th>
-                    <th>
-                      <span className="col-head">
+                    <th scope="col">
+                      <span className="table-col-head">
                         <Files size={13} />
                         Size
                       </span>
                     </th>
-                    <th>
-                      <span className="col-head">
+                    <th scope="col">
+                      <span className="table-col-head table-col-actions">
                         <Settings size={13} />
                         Actions
                       </span>
@@ -1223,35 +1427,51 @@ export function App() {
                   {libraryPagedRows.map((item, index) => (
                     <tr
                       key={item.id}
-                      className={selectedDriveIds.has(item.id) || selectedJob?.driveUrl === item.url ? "queue-row active" : "queue-row"}
-                      onClick={(event) => handleLibraryRowSelection(item.id, index, event)}
-                      title="Click to select, Ctrl/Cmd-click to toggle, Shift-click to range select"
+                      className={selectedDriveIds.has(item.id) ? "queue-row active" : "queue-row"}
+                      onMouseDown={(event) => handleLibraryRowSelection(item.id, index, event)}
+                      onMouseEnter={() => extendLibraryRowSelection(item.id, index)}
+                      title="Click: single, Ctrl: add, Shift: range, drag to sweep, Ctrl+A: select all"
                     >
-                      <td>
-                        <div className="drive-file-cell">
-                          <strong className="drive-file-name" title={item.name}>
-                            {metadataLoadingIds.includes(item.id) || item.metadataStatus === "scanning" ? "Scanning metadata..." : item.name}
-                          </strong>
-                          <button
-                            className="library-link"
-                            title="Click to copy Drive URL"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void copyDriveUrl(item.url);
-                            }}
-                          >
-                            <HardDrive size={12} />
-                            <span>{item.url}</span>
-                          </button>
-                        </div>
+                      <td className="library-td-single-line library-td-file">
+                        <span className="library-cell-ellipsis drive-file-name" title={item.name}>
+                          {metadataLoadingIds.includes(item.id) || item.metadataStatus === "scanning" ? "Scanning metadata..." : item.name}
+                        </span>
                       </td>
-                      <td>
-                        <span className={`metadata-pill ${item.metadataStatus}`} title={item.metadataMessage || metadataStatusLabel(item.metadataStatus)}>
-                          {metadataStatusLabel(item.metadataStatus)}
+                      <td className="library-td-single-line library-td-url">
+                        <button
+                          type="button"
+                          className="library-link library-cell-ellipsis library-url-button"
+                          title={item.url}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void copyDriveUrl(item.url);
+                          }}
+                        >
+                          <span>{item.url}</span>
+                        </button>
+                      </td>
+                      <td className="library-td-single-line library-td-status">
+                        <span
+                          className={`library-metadata-status md-${item.metadataStatus}`}
+                          title={item.metadataMessage || driveLibraryMetadataLabel(item.metadataStatus)}
+                        >
+                          <DriveLibraryMetadataStatusIcon
+                            status={item.metadataStatus}
+                            spinning={metadataLoadingIds.includes(item.id) || item.metadataStatus === "scanning"}
+                          />
+                          {driveLibraryMetadataLabel(item.metadataStatus)}
+                        </span>
+                      </td>
+                      <td className="library-td-single-line library-td-group">
+                        <span className="library-cell-ellipsis" title={item.group}>
+                          {item.group || "-"}
                         </span>
                       </td>
                       <td>
-                        <span className="group-badge">{item.group}</span>
+                        <span className="metadata-value">
+                          <CalendarDays size={12} />
+                          {item.addedAt}
+                        </span>
                       </td>
                       <td>
                         <span className="metadata-value">
@@ -1277,23 +1497,33 @@ export function App() {
                           event.stopPropagation();
                         }}
                       >
-                        <button
-                          className="icon-action library-refresh-action"
-                          title="Refresh metadata"
-                          onClick={() => refreshDriveMetadata(item.id)}
-                          disabled={metadataLoadingIds.includes(item.id) || item.metadataStatus === "scanning"}
-                        >
-                          <RefreshCw size={12} className={metadataLoadingIds.includes(item.id) || item.metadataStatus === "scanning" ? "spinning" : ""} />
-                        </button>
-                        <button className="icon-action library-remove-action" title="Remove drive link" onClick={() => removeDriveLink(item.id)}>
-                          <Trash2 size={12} />
-                        </button>
+                        <div className="table-action-icons">
+                          <button
+                            type="button"
+                            className="table-action-btn table-action-reset"
+                            aria-label="Refresh metadata"
+                            title="Refresh metadata"
+                            onClick={() => refreshDriveMetadata(item.id)}
+                            disabled={metadataLoadingIds.includes(item.id) || item.metadataStatus === "scanning"}
+                          >
+                            <RefreshCw size={12} className={metadataLoadingIds.includes(item.id) || item.metadataStatus === "scanning" ? "spinning" : ""} />
+                          </button>
+                          <button
+                            type="button"
+                            className="table-action-btn table-action-close"
+                            aria-label="Remove drive link"
+                            title="Remove drive link"
+                            onClick={() => removeDriveLink(item.id)}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {libraryRows.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="library-empty">
+                      <td colSpan={9} className="library-empty">
                         No drive items match current filters.
                       </td>
                     </tr>
@@ -1325,18 +1555,15 @@ export function App() {
                   </button>
                 </div>
                 <div className="pagination-meta">
-                  <span>
-                    {libraryRows.length === 0 ? "0" : libraryPageStart + 1}-{libraryPageEnd} of {libraryRows.length} items
-                  </span>
                   <label>
                     Rows per page
-                    <SmartFilterDropdown
-                      value={String(libraryPageSize)}
-                      options={tablePageSizeDropdownOptions}
-                      label="Rows per page"
-                      searchLabel="Search page size..."
-                      onChange={(value) => setLibraryPageSize(Number(value))}
-                    />
+                    <select value={libraryPageSize} onChange={(event) => setLibraryPageSize(Number(event.target.value))}>
+                      {TABLE_PAGE_SIZE_OPTIONS.map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
               </div>
@@ -1345,7 +1572,7 @@ export function App() {
         )}
         {drivePickerOpen && selectedJob && (
           <div className="modal-backdrop" role="presentation" onMouseDown={() => setDrivePickerOpen(false)}>
-            <div className="modal-card drive-picker-modal" role="dialog" aria-modal="true" aria-labelledby="drive-picker-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-card drive-picker-modal shell" role="dialog" aria-modal="true" aria-labelledby="drive-picker-title" onMouseDown={(event) => event.stopPropagation()}>
               <div className="pane-head">
                 <div>
                   <h2 id="drive-picker-title">Choose from Drive Library</h2>
@@ -1357,8 +1584,8 @@ export function App() {
               </div>
               <div className="drive-picker-summary">
                 <div className="metric-card">
-                  <span className="metric-icon metric-ready">
-                    <Cloud size={12} />
+                  <span className="metric-icon metric-ready metric-drive-brand">
+                    <GoogleDriveBrandIcon size={22} className="drive-brand-metric" title="Google Drive" />
                   </span>
                   <div className="metric-content">
                     <span className="metric-label">Selected</span>
@@ -1384,59 +1611,78 @@ export function App() {
                   </div>
                 </div>
               </div>
-              <div className="drive-picker-toolbar">
+              <div className="drive-picker-toolbar table-header-filters profile-filters">
                 <label className="input with-icon">
                   <Search size={15} />
-                  <input value={configDriveSearch} onChange={(event) => setConfigDriveSearch(event.target.value)} placeholder="Search file, group, metadata, Drive link..." autoFocus />
+                  <input value={configDriveSearch} onChange={(event) => setConfigDriveSearch(event.target.value)} placeholder="Search file, group, Drive link…" autoFocus />
                 </label>
-                <SmartFilterDropdown
-                  value={configDriveGroupFilter}
-                  options={libraryGroupDropdownOptions}
-                  label="Group"
-                  searchLabel="Search groups..."
-                  onChange={setConfigDriveGroupFilter}
+                <MultiSelectDropdown
+                  values={configDriveSelectedStatuses}
+                  options={libraryDriveMetadataStatusFilterOptions}
+                  label="Status"
+                  searchLabel="Search statuses…"
+                  summaryLabel="statuses"
+                  defaultTone="status"
+                  onChange={setConfigDriveSelectedStatuses}
                 />
-                <button className="ghost slim-button" onClick={() => updateSelectedDriveUrls(configDriveRows.map((item) => item.url))} disabled={configDriveRows.length === 0}>
-                  <Check size={14} />
-                  Select filtered
-                </button>
+                <MultiSelectDropdown
+                  values={configDriveSelectedResolutions}
+                  options={libraryDriveResolutionFilterOptions}
+                  label="Resolution"
+                  searchLabel="Search resolutions…"
+                  summaryLabel="resolutions"
+                  defaultTone="platform"
+                  onChange={setConfigDriveSelectedResolutions}
+                />
               </div>
               <div className="drive-picker-table-wrap">
-                <table className="queue-table library-table drive-picker-table">
+                <table className="queue-table library-table drive-picker-table row-select-table">
                   <thead>
                     <tr>
-                      <th>
-                        <span className="col-head">
-                          <Cloud size={13} />
-                          File / Drive Link
+                      <th scope="col">
+                        <span className="table-col-head table-col-profile">
+                          <FileText size={13} />
+                          File
                         </span>
                       </th>
-                      <th>
-                        <span className="col-head">
+                      <th scope="col">
+                        <span className="table-col-head table-col-drive drive-brand-col-head">
+                          <Link2 size={13} />
+                          Drive link
+                        </span>
+                      </th>
+                      <th scope="col">
+                        <span className="table-col-head table-col-status">
                           <CircleCheckBig size={13} />
                           Status
                         </span>
                       </th>
-                      <th>
-                        <span className="col-head">
+                      <th scope="col">
+                        <span className="table-col-head table-col-group">
                           <FolderOpen size={13} />
                           Group
                         </span>
                       </th>
-                      <th>
-                        <span className="col-head">
+                      <th scope="col">
+                        <span className="table-col-head">
+                          <CalendarDays size={13} />
+                          Added
+                        </span>
+                      </th>
+                      <th scope="col">
+                        <span className="table-col-head table-col-proxy">
                           <Clock3 size={13} />
                           Duration
                         </span>
                       </th>
-                      <th>
-                        <span className="col-head">
+                      <th scope="col">
+                        <span className="table-col-head table-col-note">
                           <Tv size={13} />
                           Resolution
                         </span>
                       </th>
-                      <th>
-                        <span className="col-head">
+                      <th scope="col">
+                        <span className="table-col-head">
                           <Files size={13} />
                           Size
                         </span>
@@ -1450,27 +1696,42 @@ export function App() {
                         <tr
                           key={item.id}
                           className={selected ? "queue-row active" : "queue-row"}
-                          onClick={(event) => applyDriveLibraryItem(item, index, event)}
-                          title="Click to toggle, Shift-click for range"
+                          onMouseDown={(event) => applyDriveLibraryItem(item, index, event)}
+                          onMouseEnter={() => extendDrivePickerSelection(item, index)}
+                          title="Click: single, Ctrl: add, Shift: range, drag to sweep, Ctrl+A: select all"
                         >
-                          <td>
-                            <div className="drive-file-cell drive-picker-file-cell">
-                              <strong className="drive-file-name" title={item.name}>
-                                {metadataLoadingIds.includes(item.id) || item.metadataStatus === "scanning" ? "Scanning metadata..." : item.name}
-                              </strong>
-                              <span className="library-link" title={item.url}>
-                                <Cloud size={12} />
-                                <span>{item.url}</span>
-                              </span>
-                            </div>
+                          <td className="library-td-single-line library-td-file">
+                            <span className="library-cell-ellipsis drive-file-name" title={item.name}>
+                              {metadataLoadingIds.includes(item.id) || item.metadataStatus === "scanning" ? "Scanning metadata..." : item.name}
+                            </span>
                           </td>
-                          <td>
-                            <span className={`metadata-pill ${item.metadataStatus}`} title={item.metadataMessage || metadataStatusLabel(item.metadataStatus)}>
-                              {metadataStatusLabel(item.metadataStatus)}
+                          <td className="library-td-single-line library-td-url">
+                            <span className="library-link library-cell-ellipsis library-url-static" title={item.url}>
+                              <span>{item.url}</span>
+                            </span>
+                          </td>
+                          <td className="library-td-single-line library-td-status">
+                            <span
+                              className={`library-metadata-status md-${item.metadataStatus}`}
+                              title={item.metadataMessage || driveLibraryMetadataLabel(item.metadataStatus)}
+                            >
+                              <DriveLibraryMetadataStatusIcon
+                                status={item.metadataStatus}
+                                spinning={metadataLoadingIds.includes(item.id) || item.metadataStatus === "scanning"}
+                              />
+                              {driveLibraryMetadataLabel(item.metadataStatus)}
+                            </span>
+                          </td>
+                          <td className="library-td-single-line library-td-group">
+                            <span className="library-cell-ellipsis" title={item.group}>
+                              {item.group || "-"}
                             </span>
                           </td>
                           <td>
-                            <span className="group-badge">{item.group}</span>
+                            <span className="metadata-value">
+                              <CalendarDays size={12} />
+                              {item.addedAt}
+                            </span>
                           </td>
                           <td>
                             <span className="metadata-value">
@@ -1495,7 +1756,7 @@ export function App() {
                     })}
                     {configDriveRows.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="library-empty">
+                        <td colSpan={8} className="library-empty">
                           No Drive links match current filters.
                         </td>
                       </tr>
@@ -1503,12 +1764,17 @@ export function App() {
                   </tbody>
                 </table>
               </div>
-              <div className="modal-actions">
-                <button className="ghost slim-button" onClick={() => updateSelectedDriveUrls([])} disabled={selectedJobDriveUrls.length === 0}>
+              <div className="modal-actions modal-actions-centered">
+                <button className="ghost compact profile-header-btn-run" onClick={() => updateSelectedDriveUrls(configDriveRows.map((item) => item.url))} disabled={configDriveRows.length === 0}>
+                  <Check size={14} />
+                  Select filtered
+                </button>
+                <button className="ghost compact profile-header-btn-close" onClick={() => updateSelectedDriveUrls([])} disabled={selectedJobDriveUrls.length === 0}>
+                  <X size={14} />
                   Clear selected
                 </button>
                 <button
-                  className="ghost slim-button"
+                  className="ghost compact profile-header-btn-new"
                   onClick={() => {
                     setDrivePickerOpen(false);
                     setDriveModalOpen(true);
@@ -1517,7 +1783,99 @@ export function App() {
                   <Plus size={14} />
                   Add Drive Link
                 </button>
-                <button className="primary slim-button" onClick={() => setDrivePickerOpen(false)}>
+                <button className="ghost compact profile-header-btn-delete" onClick={() => setDrivePickerOpen(false)}>
+                  <CheckCircle2 size={14} />
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {groupManagerOpen && (
+          <div className="modal-backdrop" role="presentation" onMouseDown={() => setGroupManagerOpen(false)}>
+            <div className="modal-card group-manager-modal shell" role="dialog" aria-modal="true" aria-labelledby="group-manager-title" onMouseDown={(event) => event.stopPropagation()}>
+              <header className="table-header-top">
+                <h2 id="group-manager-title">Manage Groups</h2>
+                <span>{groupManagerRows.length} of {mergedGroupOptions.length} groups</span>
+              </header>
+              <div className="table-header-filters profile-filters group-manager-filters">
+                <label className="input with-icon">
+                  <Search size={15} />
+                  <input value={groupSearch} onChange={(event) => setGroupSearch(event.target.value)} placeholder="Search group..." autoFocus />
+                </label>
+                <label>
+                  Group name
+                  <input value={groupDraft} onChange={(event) => setGroupDraft(event.target.value)} placeholder="Type group name" />
+                </label>
+              </div>
+              <div className="table-wrap group-manager-table-wrap">
+                <table className="queue-table row-select-table group-manager-table">
+                  <thead>
+                    <tr>
+                      <th>
+                        <span className="table-col-head table-col-group">
+                          <FolderOpen size={13} />
+                          Group
+                        </span>
+                      </th>
+                      <th>
+                        <span className="table-col-head table-col-status">
+                          <Files size={13} />
+                          Links
+                        </span>
+                      </th>
+                      <th>
+                        <span className="table-col-head table-col-proxy">
+                          <CalendarDays size={13} />
+                          Last added
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupManagerRows.map((row) => (
+                      <tr
+                        key={row.group}
+                        className={selectedManagedGroup === row.group ? "queue-row active" : "queue-row"}
+                        onClick={() => {
+                          setSelectedManagedGroup(row.group);
+                          setGroupDraft(row.group);
+                        }}
+                      >
+                        <td>{row.group}</td>
+                        <td>{row.count}</td>
+                        <td>{row.updatedAt}</td>
+                      </tr>
+                    ))}
+                    {groupManagerRows.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="library-empty">
+                          No groups match search.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="modal-actions modal-actions-centered group-manager-actions">
+                <button className="ghost compact profile-header-btn-new" onClick={addManagedGroup} disabled={!groupDraft.trim()}>
+                  <Plus size={14} />
+                  Add group
+                </button>
+                <button className="ghost compact profile-header-btn-run" onClick={renameManagedGroup} disabled={!groupDraft.trim() || !selectedManagedGroup || selectedManagedGroup === "Default"}>
+                  <Pencil size={14} />
+                  Rename
+                </button>
+                <button className="ghost compact profile-header-btn-close" onClick={deleteManagedGroup} disabled={!selectedManagedGroup || selectedManagedGroup === "Default"}>
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+                <button className="ghost compact profile-header-btn-new" onClick={() => applyGroupToSelectedDriveLinks(selectedManagedGroup)} disabled={selectedLibraryCount === 0 || !selectedManagedGroup}>
+                  <FolderOpen size={14} />
+                  Apply to selected ({selectedLibraryCount})
+                </button>
+                <button className="ghost compact profile-header-btn-delete" onClick={() => setGroupManagerOpen(false)}>
+                  <CheckCircle2 size={14} />
                   Done
                 </button>
               </div>
@@ -1526,7 +1884,7 @@ export function App() {
         )}
         {driveModalOpen && (
           <div className="modal-backdrop" role="presentation" onMouseDown={() => setDriveModalOpen(false)}>
-            <div className="modal-card drive-modal" role="dialog" aria-modal="true" aria-labelledby="drive-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-card drive-modal shell" role="dialog" aria-modal="true" aria-labelledby="drive-modal-title" onMouseDown={(event) => event.stopPropagation()}>
               <div className="pane-head">
                 <h2 id="drive-modal-title">Add Drive Link</h2>
                 <button className="icon-action library-remove-action" title="Close" onClick={() => setDriveModalOpen(false)}>
@@ -1547,7 +1905,7 @@ export function App() {
                   Group
                   <input value={driveGroupDraft} onChange={(event) => setDriveGroupDraft(event.target.value)} placeholder="Default" list="drive-groups" />
                   <datalist id="drive-groups">
-                    {libraryGroupOptions.map((group) => (
+                    {mergedGroupOptions.map((group) => (
                       <option value={group} key={group} />
                     ))}
                   </datalist>

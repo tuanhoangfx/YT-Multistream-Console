@@ -1,0 +1,833 @@
+/*
+  Canonical workspace design baseline.
+  Scope: normalize shell/table/header/actions style from the primary data table upward.
+  This file is self-contained and does not import tool-specific CSS.
+*/
+
+:root {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --bg: #181922;
+  --surface: #1f2937;
+  --surface-2: #242f40;
+  --surface-3: #2b3950;
+  --border: #3d4d63;
+  --border-soft: #334155;
+  --text: #f8fafc;
+  --muted: #9ca3af;
+  --accent: #3b82f6;
+  --accent-2: #60a5fa;
+  --blue: #60a5fa;
+  --violet: #8b5cf6;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/*
+  Stat card parity override:
+  enforce YT-Multistream-Console metric card styles 1:1.
+*/
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  min-height: 68px;
+  padding: 0 14px;
+  background: #1f2937;
+  border: 0;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+.metric-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 999px;
+  border: 0;
+  margin-top: 0;
+  background: rgb(59 130 246 / 0.13);
+}
+
+.metric-ready {
+  color: #3b82f6;
+  background: rgb(59 130 246 / 0.13);
+}
+
+.metric-running {
+  color: #22c55e;
+  background: rgb(34 197 94 / 0.14);
+}
+
+.metric-running svg {
+  transform: translateX(1px);
+}
+
+.metric-failed {
+  color: #ef4444;
+  background: rgb(239 68 68 / 0.14);
+}
+
+.metric-failed svg {
+  transform: none;
+}
+
+.metric-scheduled {
+  color: #f59e0b;
+  background: rgb(245 158 11 / 0.15);
+}
+
+.metric-applied {
+  color: #14b8a6;
+  background: rgb(20 184 166 / 0.15);
+}
+
+.metric-content {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.metric-label {
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.metric-value {
+  color: #f9fafb;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.metric-card.danger .metric-value {
+  color: #f9fafb;
+}
+
+.metric-icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.5;
+}
+
+/*
+  Standard table header pattern:
+  top/title row + stats row + filters row + actions row.
+  Stat cards and buttons are content-flexible; layout/style stays consistent.
+*/
+:root .shell .table-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+:root .shell .table-header-top > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+:root .shell .table-header-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* Hard lock stat-card visuals for all standardized table headers */
+:root .shell .table-header-stats .metric-card {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 14px !important;
+  min-height: 68px !important;
+  padding: 0 14px !important;
+  background: #1f2937 !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  box-shadow: none !important;
+}
+
+:root .shell .table-header-stats .metric-icon {
+  display: inline-grid !important;
+  flex: 0 0 auto !important;
+  width: 40px !important;
+  height: 40px !important;
+  place-items: center !important;
+  border-radius: 999px !important;
+  border: 0 !important;
+  margin-top: 0 !important;
+}
+
+:root .shell .table-header-stats .metric-icon svg {
+  display: block !important;
+  width: 22px !important;
+  height: 22px !important;
+  stroke-width: 2.5 !important;
+}
+
+:root .shell .table-header-stats .metric-label {
+  color: #9ca3af !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+}
+
+:root .shell .table-header-stats .metric-value {
+  color: #f9fafb !important;
+  font-size: 20px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
+}
+
+:root .shell .table-header-stats .metric-ready {
+  color: #3b82f6 !important;
+  background: rgb(59 130 246 / 0.13) !important;
+}
+
+:root .shell .table-header-stats .metric-running {
+  color: #22c55e !important;
+  background: rgb(34 197 94 / 0.14) !important;
+}
+
+:root .shell .table-header-stats .metric-scheduled {
+  color: #f59e0b !important;
+  background: rgb(245 158 11 / 0.15) !important;
+}
+
+:root .shell .table-header-stats .metric-applied {
+  color: #14b8a6 !important;
+  background: rgb(20 184 166 / 0.15) !important;
+}
+
+:root .shell .table-header-stats .metric-failed {
+  color: #ef4444 !important;
+  background: rgb(239 68 68 / 0.14) !important;
+}
+
+:root .shell .table-header-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px 180px;
+  gap: 8px;
+  align-items: center;
+}
+
+:root .shell .profile-filters.table-header-filters {
+  grid-template-columns: minmax(0, 1fr) 180px 180px;
+}
+
+:root .shell .table-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+:root .shell .table-header-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 7px;
+}
+
+:root .shell .table-header-actions-grid button {
+  width: 100%;
+}
+
+:root .shell .profile-table-header-actions {
+  min-height: 44px;
+  padding: 0;
+}
+
+:root .shell .profile-table-header-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Primary table header action color mapping and order (legacy class names kept for compatibility) */
+:root .shell .profile-header-btn-run {
+  color: #ecfdf5;
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+  border-color: rgb(34 197 94 / 0.8);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 6px 16px rgb(22 163 74 / 0.25);
+}
+
+:root .shell .profile-header-btn-close {
+  color: #fef2f2;
+  background: linear-gradient(180deg, #f87171, #dc2626);
+  border-color: rgb(239 68 68 / 0.82);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.16), 0 6px 16px rgb(220 38 38 / 0.24);
+}
+
+:root .shell .profile-header-btn-new {
+  color: #eff6ff;
+  background: linear-gradient(180deg, #3b82f6, #2563eb);
+  border-color: rgb(59 130 246 / 0.82);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 6px 16px rgb(37 99 235 / 0.24);
+}
+
+:root .shell .profile-header-btn-delete {
+  color: #f3f4f6;
+  background: linear-gradient(180deg, #4b5563, #1f2937);
+  border-color: rgb(107 114 128 / 0.76);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 6px 16px rgb(17 24 39 / 0.3);
+}
+
+:root .shell .profile-table-header-buttons .ghost.compact:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: saturate(1.08) brightness(1.05);
+}
+
+:root .shell .profile-table-header-buttons .ghost.compact:active:not(:disabled) {
+  transform: translateY(0);
+  filter: saturate(1.02) brightness(0.98);
+}
+
+:root .shell .profile-table-header-summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/*
+  Standard action-icon style for table action column.
+  Workflow is source pattern; data tables and future boards reuse these classes.
+*/
+:root .shell .table-action-icons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  line-height: 0;
+}
+
+:root .shell .table-action-btn {
+  display: grid;
+  width: 21px;
+  min-width: 21px;
+  height: 21px;
+  min-height: 21px;
+  padding: 0;
+  place-items: center;
+  color: var(--muted);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  line-height: 0;
+}
+
+:root .shell .table-action-btn svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+:root .shell .table-action-btn:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+:root .shell .table-action-btn:disabled {
+  opacity: 0.35;
+}
+
+:root .shell .table-action-run {
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-3));
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+}
+
+:root .shell .table-action-export {
+  color: #d8b4fe;
+  background: color-mix(in srgb, var(--violet) 20%, var(--surface-3));
+  border-color: color-mix(in srgb, var(--violet) 45%, var(--border));
+}
+
+:root .shell .table-action-import {
+  color: #bae6fd;
+  background: color-mix(in srgb, #0284c7 22%, var(--surface-3));
+  border-color: color-mix(in srgb, #38bdf8 45%, var(--border));
+}
+
+:root .shell .table-action-copy {
+  color: #dbeafe;
+  background: color-mix(in srgb, var(--blue) 20%, var(--surface-3));
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--border));
+}
+
+:root .shell .table-action-reset {
+  color: #fde68a;
+  background: color-mix(in srgb, var(--warning) 20%, var(--surface-3));
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+}
+
+:root .shell .table-action-close {
+  color: #ffb4b4;
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+}
+
+:root .shell .table-action-close:hover {
+  color: color-mix(in srgb, var(--danger) 78%, #ffffff);
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 68%, var(--border));
+}
+
+/* Primary data-table action cell reuses the same icon system */
+:root .shell .queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+/*
+  Standardized table column heading (font, icon, color).
+*/
+:root .shell .table-col-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #c7cfdd;
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0.01em;
+}
+
+:root .shell .table-col-head svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.2;
+}
+
+:root .shell .table-col-profile svg,
+:root .shell .table-col-group svg {
+  color: #60a5fa;
+}
+
+:root .shell .table-col-status svg {
+  color: #22c55e;
+}
+
+:root .shell .table-col-proxy svg {
+  color: #38bdf8;
+}
+
+:root .shell .table-col-note svg {
+  color: #a78bfa;
+}
+
+:root .shell .table-col-actions svg {
+  color: #f59e0b;
+}
+
+/*
+  Primary data-table density: more rows, balanced vertical rhythm.
+*/
+:root .shell .row-select-table th {
+  height: 34px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+
+:root .shell .row-select-table td {
+  height: 42px !important;
+  font-size: 12px !important;
+}
+
+/*
+  Hide scroll buttons in header area; keep scrolling in body.
+*/
+:root .shell .table-wrap::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/*
+  Compact queue badges:
+  remove capsule background/border for source and status labels.
+*/
+.source-badge,
+.status-pill {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.source-badge {
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-pill {
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  justify-content: flex-start;
+}
+
+.status-icon,
+.source-badge svg {
+  width: 13px;
+  height: 13px;
+}
+
+/*
+  Canonical dropdown contract (table filters):
+  trigger uses filter name; menu reset option uses "All".
+*/
+:root .shell .smart-dropdown {
+  position: relative;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+}
+
+:root .shell .smart-dropdown-trigger {
+  position: relative;
+  width: 100%;
+  min-height: 32px;
+  height: 32px;
+  justify-content: flex-start;
+  padding: 0 28px 0 9px;
+  color: var(--text);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-3) 76%, transparent), var(--surface));
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--accent));
+  border-radius: 7px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035);
+}
+
+:root .shell .dropdown-trigger-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .shell .dropdown-trigger-label.status {
+  color: #c7cfdd;
+}
+
+:root .shell .dropdown-trigger-label.platform {
+  color: #c7cfdd;
+}
+
+:root .shell .dropdown-trigger-label.ready {
+  color: #60a5fa;
+}
+
+:root .shell .dropdown-trigger-label.opening {
+  color: #fbbf24;
+}
+
+:root .shell .dropdown-trigger-label.running {
+  color: #22c55e;
+}
+
+:root .shell .dropdown-trigger-label.failed {
+  color: var(--danger);
+}
+
+:root .shell .dropdown-chevron {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  transform: translateY(-50%);
+  display: block;
+  opacity: 0.82;
+  pointer-events: none;
+  transition: transform 140ms ease;
+}
+
+:root .shell .smart-dropdown.open .smart-dropdown-trigger,
+:root .shell .smart-dropdown-trigger:hover,
+:root .shell .smart-dropdown-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--surface-3) 56%, var(--surface));
+  box-shadow: none;
+}
+
+:root .shell .smart-dropdown.open .dropdown-chevron {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+:root .shell .smart-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 12;
+  display: grid;
+  width: max(100%, 180px);
+  max-width: 240px;
+  gap: 8px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--surface-2) 98%, #000000);
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+  border-radius: 8px;
+  box-shadow: 0 18px 44px rgb(0 0 0 / 0.34);
+}
+
+:root .shell .smart-dropdown-option {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  text-align: left;
+}
+
+:root .shell .dropdown-option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .shell .dropdown-option-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.6;
+}
+
+:root .shell .dropdown-option-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+:root .shell .dropdown-option-dot.blue {
+  background: #60a5fa;
+  border-color: #93c5fd;
+}
+
+:root .shell .dropdown-option-dot.teal {
+  background: #2dd4bf;
+  border-color: #5eead4;
+}
+
+:root .shell .dropdown-option-dot.violet {
+  background: #a78bfa;
+  border-color: #c4b5fd;
+}
+
+:root .shell .dropdown-option-dot.amber {
+  background: #f59e0b;
+  border-color: #fbbf24;
+}
+
+:root .shell .dropdown-option-dot.rose {
+  background: #fb7185;
+  border-color: #fda4af;
+}
+
+:root .shell .dropdown-option-dot.cyan {
+  background: #22d3ee;
+  border-color: #67e8f9;
+}
+
+:root .shell .dropdown-option-dot.lime {
+  background: #84cc16;
+  border-color: #a3e635;
+}
+
+:root .shell .dropdown-option-dot.indigo {
+  background: #6366f1;
+  border-color: #818cf8;
+}
+
+:root .shell .dropdown-option-dot.orange {
+  background: #f97316;
+  border-color: #fb923c;
+}
+
+:root .shell .dropdown-option-dot.pink {
+  background: #ec4899;
+  border-color: #f472b6;
+}
+
+:root .shell .dropdown-option-dot.emerald {
+  background: #10b981;
+  border-color: #34d399;
+}
+
+:root .shell .dropdown-option-dot.sky {
+  background: #0ea5e9;
+  border-color: #38bdf8;
+}
+
+:root .shell .dropdown-option-icon.all {
+  color: #38bdf8;
+}
+
+:root .shell .dropdown-option-icon.group,
+:root .shell .dropdown-option-icon.source,
+:root .shell .dropdown-option-icon.ready {
+  color: #60a5fa;
+}
+
+:root .shell .dropdown-option-icon.platform {
+  color: #38bdf8;
+}
+
+:root .shell .dropdown-option-icon.status,
+:root .shell .dropdown-option-icon.running {
+  color: #22c55e;
+}
+
+:root .shell .dropdown-option-icon.opening,
+:root .shell .dropdown-option-icon.pending,
+:root .shell .dropdown-option-icon.partial,
+:root .shell .dropdown-option-icon.scheduled {
+  color: #f59e0b;
+}
+
+:root .shell .dropdown-option-icon.failed {
+  color: #ef4444;
+}
+
+/*
+  Standard pagination cluster:
+  keep navigation controls grouped in a rounded container for visual stability.
+*/
+:root .shell .pagination-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 7px 10px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+:root .shell .pagination-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+:root .shell .pagination-actions span,
+:root .shell .pagination-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+:root .shell .page-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+:root .shell .page-button:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-3) 52%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+}
+
+:root .shell .pagination-meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+:root .shell .pagination-meta label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+:root .shell .pagination-meta select {
+  min-width: 72px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0 8px;
+}
+
+/*
+  Standard large modal size:
+  80% viewport width/height for data-heavy picker/editor modals.
+*/
+:root .modal-card.drive-picker-modal,
+:root .modal-card.drive-modal {
+  width: 80vw !important;
+  height: 80vh !important;
+  min-width: 80vw !important;
+  min-height: 80vh !important;
+  max-width: 80vw !important;
+  max-height: 80vh !important;
+}
+
+/*
+  Standard modal footer action alignment:
+  center primary/secondary actions for data-entry modals.
+*/
+:root .modal-actions-centered {
+  justify-content: center !important;
+  gap: 12px !important;
+}
+
+/*
+  Platform tone sync:
+  keep class mapping aligned with workflowPlatformTone() in app logic.
+*/
+.workflow-platform-higgsfield {
+  --workflow-icon-start: #22d3ee !important;
+  --workflow-icon-end: #6366f1 !important;
+  --workflow-icon-ring: rgb(99 102 241 / 0.54) !important;
+}

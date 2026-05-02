@@ -1,10 +1,12 @@
-import { driveFileKey, hasDriveValue, type DriveLibraryItem, type DriveMetadataStatus } from "./drive-utils";
+import { driveFileKey, hasDriveValue, isValidDriveLibraryFileUrl, type DriveLibraryItem, type DriveMetadataStatus } from "./drive-utils";
 
 export function appendDriveLinks(items: DriveLibraryItem[], urls: string[], groupDraft: string) {
   const existingUrls = new Set(items.map((item) => driveFileKey(item.url)));
   const group = groupDraft.trim() || "Ungrouped";
   const seenUrls = new Set(existingUrls);
   const nextItems = urls
+    .map((url) => String(url || "").trim())
+    .filter(isValidDriveLibraryFileUrl)
     .filter((url) => {
       const key = driveFileKey(url);
       if (seenUrls.has(key)) return false;

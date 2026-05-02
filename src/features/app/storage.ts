@@ -1,5 +1,11 @@
 import type { StreamJob } from "../../types";
-import { deriveMetadataStatus, getJobDriveUrls, type DriveLibraryItem, type DriveMetadataStatus } from "../drive/drive-utils";
+import {
+  cleanupDriveLibrary,
+  deriveMetadataStatus,
+  getJobDriveUrls,
+  type DriveLibraryItem,
+  type DriveMetadataStatus
+} from "../drive/drive-utils";
 import { now } from "../../utils/time";
 
 const THEME_KEY = "yt-multistream-theme";
@@ -85,7 +91,7 @@ export function readDriveLibrary(): DriveLibraryItem[] {
 
   try {
     const parsed = JSON.parse(localStorage.getItem(DRIVE_LIBRARY_KEY) || "[]") as Array<string | Partial<DriveLibraryItem>>;
-    if (!Array.isArray(parsed)) return defaultLibrary();
+    if (!Array.isArray(parsed)) return cleanupDriveLibrary(defaultLibrary());
     const items = parsed
       .map((item) => {
         if (typeof item === "string") {
@@ -131,9 +137,9 @@ export function readDriveLibrary(): DriveLibraryItem[] {
     const existingByUrl = new Map(items.map((item) => [item.url, item]));
     const seededItems = defaultLibrary().map((item) => existingByUrl.get(item.url) || item);
     const seededUrls = new Set(seededItems.map((item) => item.url));
-    return [...seededItems, ...items.filter((item) => !seededUrls.has(item.url))];
+    return cleanupDriveLibrary([...seededItems, ...items.filter((item) => !seededUrls.has(item.url))]);
   } catch {
-    return defaultLibrary();
+    return cleanupDriveLibrary(defaultLibrary());
   }
 }
 
