@@ -47,6 +47,18 @@
       "stream-key-masking"
     ]
   },
+  "distribution": {
+    "downloadsPage": "https://github.com/tuanhoangfx/YT-Multistream-Console/releases",
+    "publisher": "GitHub Releases: local `pnpm release` with ephemeral GH_TOKEN (PAT), or Actions workflow \"Release\" (workflow_dispatch; uses repo GITHUB_TOKEN).",
+    "webBuildDir": "dist/",
+    "desktopArtifactsDir": "release/",
+    "windowsInstallerDir": "release/nsis-web/",
+    "windowsInstallerPattern": "YT-Multistream-Console-Setup-{version}.exe",
+    "commandLocalPackage": "pnpm dist",
+    "commandLocalPublish": "pnpm release",
+    "ciWorkflowPublish": ".github/workflows/release.yml (workflow_dispatch)",
+    "notes": "Never commit tokens. Builds under release/nsis-web/ (.exe, .nsis.7z, latest.yml). See RELEASE.md Publish sections (aligned with GPM-Automation-Console)."
+  },
   "health": {
     "status": "Ready",
     "note": "Requires bundled FFmpeg and valid YouTube RTMP stream keys. Stream keys must stay masked in logs."

@@ -3,6 +3,10 @@ name: Release
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   package:
+    secrets: inherit
     uses: ./.github/workflows/_reusable-release.yml

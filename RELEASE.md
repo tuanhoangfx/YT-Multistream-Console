@@ -344,6 +344,33 @@ release\nsis-web\yt-multistream-console-<version>-x64.nsis.7z
 release\nsis-web\latest.yml
 ```
 
+The `.exe` is the web installer bootstrap; installation pulls the `.nsis.7z` from the same GitHub Release (see `latest.yml`).
+
+## Publish to GitHub Releases (local operator)
+
+Same pattern as **GPM-Automation-Console** (`RELEASE.md` there): Electron Builder uploads to the repo configured under `build.publish` in `package.json`.
+
+```powershell
+cd E:\Dev\Tool\YT-Multistream-Console
+$env:GH_TOKEN = "<PAT-with-repo-scope>"   # temporary only; never commit
+corepack pnpm release
+```
+
+`pnpm release` runs build + Windows NSIS Web packaging + **`--publish always`** (GitHub Releases). Use a token that can **create releases and upload assets**. Do **not** store the token in files, `tool.manifest.json`, or `RELEASE.md`. If a token was exposed, **revoke** it immediately in GitHub settings and mint a new one.
+
+Before publishing, confirm `git remote origin` matches `package.json` → `repository.url`.
+
+Fallback if Git push over HTTPS fails: upload manually exactly these files from `release\nsis-web\`: setup `.exe`, `.nsis.7z`, and `latest.yml`, and tag the release to match `package.json` version.
+
+## Publish via GitHub Actions
+
+Repository workflow **Actions → Release** (`workflow_dispatch`):
+
+1. Quality gates (`lint`, `test:unit`, `build`, optional smoke).
+2. **Publish** step runs `electron-builder --win nsis-web --publish always` with **`GITHUB_TOKEN`** — no PAT in YAML.
+
+Creates/updates the GitHub Release for the current `package.json` version on the workflow commit.
+
 ## Publish Checklist
 
 1. Bump `package.json` version.
@@ -355,7 +382,8 @@ release\nsis-web\latest.yml
    - `corepack pnpm build`
    - `corepack pnpm test:smoke`
 4. Validate that stream keys remain masked in logs.
-5. Push/tag/release on GitHub.
+5. Publish: **local** `corepack pnpm release` with `GH_TOKEN`, **or** run the **Release** workflow on GitHub Actions.
+6. Confirm `releases/latest` lists the setup `.exe`, `.nsis.7z`, and `latest.yml`.
 
 ## Rollback
 

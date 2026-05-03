@@ -8,6 +8,9 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: write
+
 jobs:
   package:
     runs-on: windows-latest
@@ -39,5 +42,7 @@ jobs:
         if: ${{ inputs.run_smoke }}
         run: pnpm test:smoke:ci
 
-      - name: Package installer
-        run: pnpm dist
+      - name: Publish Windows installer to GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: corepack pnpm exec electron-builder --win nsis-web --publish always
