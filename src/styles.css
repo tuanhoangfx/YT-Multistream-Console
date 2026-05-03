@@ -8,6 +8,8 @@
   --control-height-compact: 32px;
   /* Uniform height for Stream Config fields (inputs + dropdown triggers + Browse). */
   --stream-field-height: var(--control-height-compact);
+  /* Compact datetime field trigger — Datetime_Picker_Standard.md */
+  --datetime-field-height: var(--stream-field-height);
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -99,6 +101,7 @@ button:disabled {
   --accent: #008b78;
   --accent-2: #0aa06f;
   --blue: #2563eb;
+  --violet: #7c3aed;
   --warning: #d97706;
   --danger: #dc2626;
   --selected: #94a3b8;
@@ -312,6 +315,15 @@ h2 {
   border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
 }
 
+.compact {
+  min-height: 28px;
+  padding: 0 9px;
+}
+
+.toolbar {
+  flex-wrap: wrap;
+}
+
 .stop {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
@@ -359,17 +371,108 @@ h2 {
   text-transform: capitalize;
 }
 
-.notice {
+/* App error: full-viewport glass overlay (replaces inline .notice banner). */
+.app-error-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: max(20px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  cursor: pointer;
+  background:
+    radial-gradient(
+      ellipse 130% 90% at 50% -10%,
+      color-mix(in srgb, var(--danger) 22%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(ellipse 100% 65% at 50% 110%, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 52%),
+    rgb(12 14 22 / 0.42);
+  backdrop-filter: blur(16px) saturate(165%);
+  -webkit-backdrop-filter: blur(16px) saturate(165%);
+}
+
+.app-error-overlay-card {
+  cursor: default;
+  width: min(420px, 100%);
+  max-width: 100%;
+  padding: 20px 20px 18px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, rgb(255 255 255 / 0.07));
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--surface-2) 93%, rgb(255 255 255 / 0.04)),
+    color-mix(in srgb, var(--surface) 86%, rgb(10 11 14))
+  );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--danger) 24%, transparent),
+    0 28px 72px rgb(0 0 0 / 0.5),
+    0 0 100px -28px color-mix(in srgb, var(--danger) 42%, transparent);
+}
+
+.app-error-overlay-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.app-error-overlay-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
+  gap: 11px;
+  min-width: 0;
+}
+
+.app-error-overlay-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
   color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
-  border-radius: 8px;
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--danger) 55%, transparent));
+}
+
+.app-error-overlay-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 780;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.app-error-overlay-message {
+  margin: 0;
+  padding: 12px 0 16px;
   font-size: 13px;
+  font-weight: 640;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+}
+
+.app-error-overlay-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.theme-light .app-error-overlay-backdrop {
+  background:
+    radial-gradient(
+      ellipse 130% 90% at 50% -10%,
+      color-mix(in srgb, var(--danger) 18%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(ellipse 100% 65% at 50% 110%, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 52%),
+    rgb(255 255 255 / 0.55);
+}
+
+.theme-light .app-error-overlay-card {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--danger) 18%, var(--border)),
+    0 28px 64px rgb(25 40 60 / 0.18),
+    0 0 80px -28px color-mix(in srgb, var(--danger) 28%, transparent);
 }
 
 .layout {
@@ -679,7 +782,7 @@ h2 {
 .right-pane > .card:first-child {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .queue-filters,
@@ -801,9 +904,11 @@ h2 {
 /*
   Stream Config (Source / Run mode / Publish): same contract as Source type —
   trigger + menu labels stay neutral; only semantic icon tones differ.
+  Prefix `.shell` so specificity wins over `workspace-design-base.css`
+  `:root .shell .dropdown-trigger-label.running` etc.
 */
-.stream-config-card .smart-dropdown .dropdown-trigger-label,
-.stream-config-card .smart-dropdown .dropdown-option-label {
+.shell .stream-config-card .smart-dropdown .dropdown-trigger-label,
+.shell .stream-config-card .smart-dropdown .dropdown-option-label {
   color: var(--text);
 }
 
@@ -834,7 +939,7 @@ h2 {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 12;
+  z-index: 48;
   display: grid;
   width: max(100%, 180px);
   max-width: 240px;
@@ -844,6 +949,24 @@ h2 {
   border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
   border-radius: 8px;
   box-shadow: 0 18px 44px rgb(0 0 0 / 0.34);
+}
+
+/* Open upward when nested in a compact scroll pane (Stream Config footer) — avoids clipping + outer scrollbar churn. */
+.smart-dropdown-menu.menu-above {
+  top: auto;
+  bottom: calc(100% + 6px);
+  box-shadow: 0 -14px 40px rgb(0 0 0 / 0.32);
+}
+
+/* Match `workspace-design-base.css` selector strength so menu stacks above pane chrome. */
+:root .shell .smart-dropdown-menu {
+  z-index: 48;
+}
+
+:root .shell .smart-dropdown-menu.menu-above {
+  top: auto;
+  bottom: calc(100% + 6px);
+  box-shadow: 0 -14px 40px rgb(0 0 0 / 0.32);
 }
 
 .smart-dropdown-search {
@@ -936,6 +1059,18 @@ h2 {
 .dropdown-option-icon.running,
 .dropdown-option-icon.scanning {
   color: #22c55e;
+}
+
+.dropdown-option-icon.immediate {
+  color: var(--accent-2);
+}
+
+.dropdown-option-icon.loop {
+  color: color-mix(in srgb, var(--accent-2) 90%, var(--muted));
+}
+
+.dropdown-option-icon.shuffle {
+  color: var(--violet);
 }
 
 .dropdown-option-icon.opening,
@@ -1192,32 +1327,35 @@ h2 {
   white-space: nowrap;
 }
 
-.schedule-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+/*
+  Publish mode + Schedule time share one grid rhythm (gap 7px, same width).
+  Neutralize global `label > input { margin-top: 7px }` here — Publish already zeros
+  `label > .smart-dropdown`; Schedule time used to inherit double gap vs Publish.
+*/
+.schedule-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--space-2) var(--space-3);
-  align-items: start;
+  min-width: 0;
 }
 
-.schedule-mode-field {
+.schedule-inline > label:is(.schedule-mode-field, .schedule-time-field) {
+  display: grid;
+  gap: 7px;
+  align-content: start;
+  flex: 0 0 auto;
   width: var(--dropdown-width-config);
   max-width: 100%;
   margin: 0;
 }
 
-.schedule-mode-field .smart-dropdown {
-  margin-top: 7px;
+.schedule-inline > label.schedule-mode-field > .smart-dropdown,
+.schedule-inline > label.schedule-time-field > .schedule-datetime {
+  margin-top: 0;
 }
 
-.schedule-mode-hint {
-  color: var(--muted);
-  font-size: var(--fs-meta);
-}
-
-.schedule-actions {
-  display: flex;
-  justify-content: flex-start;
-}
+/* Picker chrome: workspace-design-base.css — contract in Dev/Rules/standards/Datetime_Picker_Standard.md */
 
 .form-grid .span-2,
 .modal-form .span-2 {
@@ -1226,7 +1364,7 @@ h2 {
 
 .stream-config-card {
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .stream-config-card .pane-head {
@@ -1237,7 +1375,7 @@ h2 {
   min-width: 0;
 }
 
-.stream-config-card input:not([type="datetime-local"]),
+.stream-config-card input,
 .stream-config-card select {
   min-height: var(--stream-field-height);
   height: var(--stream-field-height);
@@ -1304,17 +1442,21 @@ h2 {
   min-width: 0;
 }
 
+/*
+  Same stack as `.source-settings-cell`: grid gap separates label copy from control.
+  Avoid only `margin-top` on `.smart-dropdown` here — block layout reads tighter than the Source type row (7px grid gap).
+*/
 .drive-run-mode-field {
+  display: grid;
+  gap: 7px;
+  align-content: start;
   margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 760;
   width: var(--dropdown-width-config);
   max-width: 100%;
 }
 
-.drive-run-mode-field .smart-dropdown {
-  margin-top: 6px;
+.drive-run-mode-field > .smart-dropdown {
+  margin-top: 0;
 }
 
 .drive-selected-list {

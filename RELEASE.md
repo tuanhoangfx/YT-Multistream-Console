@@ -2,6 +2,34 @@
 
 Release and distribution process for `YT Multistream Console`.
 
+## 2026-05-03 - Code Update 0.1.14
+
+- Version: `0.1.14`
+- Timestamp: 2026-05-03 19:06 (UTC+7)
+- Commit: `d1e289a`
+- Type: Feature/Fix
+- Status: Verified
+
+### Changes
+
+- Updated source version to `0.1.14` and synced release metadata.
+- Updated `src/App.tsx`.
+- Updated `src/components/ScheduleDatetimeField.tsx`.
+- Updated `src/components/SmartFilterDropdown.tsx`.
+- Updated `src/styles.css`.
+- Updated `src/styles/workspace-design-base.css`.
+
+
+### Verification
+
+```powershell
+pnpm sync:all
+pnpm build
+```
+
+Result: passed.
+
+
 ## 2026-05-03 - Code Update 0.1.13
 
 - Version: `0.1.13`

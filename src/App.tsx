@@ -56,6 +56,7 @@ import { useDriveMetadataScanner } from "./features/drive/useDriveMetadataScanne
 import { now } from "./utils/time";
 import { MultiSelectDropdown } from "./components/MultiSelectDropdown";
 import { GroupApplyDropdown } from "./components/GroupApplyDropdown";
+import { ScheduleDatetimeField } from "./components/ScheduleDatetimeField";
 import { SmartFilterDropdown, type DropdownOption } from "./components/SmartFilterDropdown";
 import { GoogleDriveBrandIcon } from "./components/GoogleDriveBrandIcon";
 import { SourceBadge, StatusBadge } from "./components/StatusBadges";
@@ -338,6 +339,15 @@ export function App() {
   }, [libraryPage, libraryTotalPages]);
 
   useEffect(() => {
+    if (!error) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setError("");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [error]);
+
+  useEffect(() => {
     checkFfmpegStatus()
       .then((result) => {
         setFfmpegStatus(result.ok ? "ok" : "missing");
@@ -519,27 +529,35 @@ export function App() {
     }
   }
 
-  function scheduleSelectedJob() {
-    if (!selectedJob || selectedJob.publishMode !== "scheduled" || !selectedJob.scheduledAt) {
-      setError("Pick a schedule time first.");
+  function commitScheduledAtInput(raw: string) {
+    if (!selectedJob || selectedJob.publishMode !== "scheduled") return;
+    const name = selectedJob.channelName;
+
+    if (!raw) {
+      setError("");
+      if (selectedJob.status === "scheduled") {
+        updateSelectedJob(buildCancelledScheduleUpdate());
+        addLog("info", `${name} schedule cancelled`);
+      } else {
+        updateSelectedJob({ scheduledAt: "" });
+      }
       return;
     }
-    const scheduledTime = new Date(selectedJob.scheduledAt).getTime();
-    if (!Number.isFinite(scheduledTime) || scheduledTime <= Date.now()) {
+
+    const ms = new Date(raw).getTime();
+    if (!Number.isFinite(ms) || ms <= Date.now()) {
       setError("Schedule time must be in the future.");
+      updateSelectedJob({
+        scheduledAt: raw,
+        ...(selectedJob.status === "scheduled" ? { status: "idle" as const, lastMessage: "Ready", updatedAt: now() } : {})
+      });
       return;
     }
+
     setError("");
-    updateSelectedJob(buildScheduledUpdate(selectedJob.scheduledAt));
-    addLog("info", `${selectedJob.channelName} scheduled for ${new Date(selectedJob.scheduledAt).toLocaleString()}`);
+    updateSelectedJob({ scheduledAt: raw, ...buildScheduledUpdate(raw) });
+    addLog("info", `${name} scheduled for ${new Date(raw).toLocaleString()}`);
   }
-
-  function cancelSelectedSchedule() {
-    if (!selectedJob) return;
-    updateSelectedJob(buildCancelledScheduleUpdate());
-    addLog("info", `${selectedJob.channelName} schedule cancelled`);
-  }
-
 
   function addDriveLinks(urls = parseDriveLinks(driveDraft)) {
     if (urls.length === 0) return;
@@ -756,11 +774,11 @@ export function App() {
     { value: "drive", label: "Google Drive", tone: "drive" }
   ];
   const drivePlayModeOptions: DropdownOption[] = [
-    { value: "sequential", label: "Loop", tone: "scheduled" },
-    { value: "random", label: "Random", tone: "running" }
+    { value: "sequential", label: "Loop", tone: "loop" },
+    { value: "random", label: "Random", tone: "shuffle" }
   ];
   const publishModeOptions: DropdownOption[] = [
-    { value: "immediate", label: "Publish now", tone: "running" },
+    { value: "immediate", label: "Publish", tone: "immediate" },
     { value: "scheduled", label: "Schedule", tone: "scheduled" }
   ];
   const libraryDriveMetadataStatusFilterOptions = useMemo(
@@ -824,13 +842,6 @@ export function App() {
             </button>
           </div>
         </header>
-
-        {error && (
-          <div className="notice">
-            <XCircle size={16} />
-            {error}
-          </div>
-        )}
 
         {view === "streams" && (
           <section className="layout">
@@ -902,7 +913,7 @@ export function App() {
               />
             </div>
             <div className="table-header-actions profile-table-header-actions">
-              <div className="profile-table-header-buttons">
+              <div className="toolbar profile-table-header-buttons">
                 <button className="ghost compact profile-header-btn-run" onClick={startAll} disabled={busy || ffmpegStatus !== "ok"}>
                   <Play size={14} />
                   Run
@@ -1161,56 +1172,40 @@ export function App() {
                         <CalendarClock size={13} />
                         Schedule
                       </h3>
-                      <label className="schedule-mode-field">
-                        Publish mode
-                        <SmartFilterDropdown
-                          value={selectedJob.publishMode || "immediate"}
-                          options={publishModeOptions}
-                          label="Publish mode"
-                          searchLabel="Search publish mode..."
-                          onChange={(value) => {
-                            const nextMode = value as StreamJob["publishMode"];
-                            if (nextMode === "immediate") {
-                              if (selectedJob.status === "scheduled") {
-                                updateSelectedJob({ publishMode: "immediate", ...buildCancelledScheduleUpdate(), lastMessage: "Ready" });
+                      <div className="schedule-inline">
+                        <label className="schedule-mode-field">
+                          Publish mode
+                          <SmartFilterDropdown
+                            value={selectedJob.publishMode || "immediate"}
+                            options={publishModeOptions}
+                            label="Publish mode"
+                            searchLabel="Search publish mode..."
+                            triggerTitle={
+                              (selectedJob.publishMode || "immediate") === "immediate"
+                                ? "Stream starts when you click Start selected."
+                                : undefined
+                            }
+                            onChange={(value) => {
+                              const nextMode = value as StreamJob["publishMode"];
+                              if (nextMode === "immediate") {
+                                if (selectedJob.status === "scheduled") {
+                                  updateSelectedJob({ publishMode: "immediate", ...buildCancelledScheduleUpdate(), lastMessage: "Ready" });
+                                  return;
+                                }
+                                updateSelectedJob({ publishMode: "immediate", scheduledAt: "" });
                                 return;
                               }
-                              updateSelectedJob({ publishMode: "immediate", scheduledAt: "" });
-                              return;
-                            }
-                            updateSelectedJob({ publishMode: "scheduled" });
-                          }}
-                        />
-                      </label>
-                      <div className="schedule-grid">
+                              updateSelectedJob({ publishMode: "scheduled" });
+                            }}
+                          />
+                        </label>
                         {(selectedJob.publishMode || "immediate") === "scheduled" ? (
-                          <label>
+                          <label className="schedule-time-field">
                             Schedule time
-                            <input
-                              type="datetime-local"
-                              value={selectedJob.scheduledAt || ""}
-                              onChange={(event) => updateSelectedJob({ scheduledAt: event.target.value })}
-                            />
+                            <ScheduleDatetimeField value={selectedJob.scheduledAt || ""} onChange={commitScheduledAtInput} />
                           </label>
-                        ) : (
-                          <span className="schedule-mode-hint">Publish now: stream starts when you click Start selected.</span>
-                        )}
+                        ) : null}
                       </div>
-                      {(selectedJob.publishMode || "immediate") === "scheduled" && (
-                        <div className="schedule-actions">
-                          {selectedJob.status === "scheduled" ? (
-                            <button className="ghost slim-button" onClick={cancelSelectedSchedule}>
-                              <CalendarClock size={14} />
-                              Cancel schedule
-                            </button>
-                          ) : (
-                            <button className="ghost slim-button" onClick={scheduleSelectedJob}>
-                              <CalendarClock size={14} />
-                              Schedule selected
-                            </button>
-                          )}
-                        </div>
-                      )}
                     </section>
                   </div>
                   <div className="stream-action-bar">
@@ -2022,6 +2017,46 @@ export function App() {
             </div>
           </div>
         )}
+        {error ? (
+          <div
+            className="app-error-overlay-backdrop"
+            role="presentation"
+            onMouseDown={() => {
+              setError("");
+            }}
+          >
+            <div
+              className="app-error-overlay-card shell"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="app-error-title"
+              aria-describedby="app-error-desc"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <div className="app-error-overlay-header">
+                <div className="app-error-overlay-title-row">
+                  <span className="app-error-overlay-icon" aria-hidden>
+                    <XCircle size={22} strokeWidth={2.1} />
+                  </span>
+                  <h2 id="app-error-title" className="app-error-overlay-title">
+                    Something went wrong
+                  </h2>
+                </div>
+                <button type="button" className="icon-action library-remove-action" title="Dismiss" aria-label="Dismiss" onClick={() => setError("")}>
+                  <X size={14} />
+                </button>
+              </div>
+              <p id="app-error-desc" className="app-error-overlay-message">
+                {error}
+              </p>
+              <div className="app-error-overlay-actions">
+                <button type="button" className="primary" autoFocus onClick={() => setError("")}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </main>
     </div>
   );

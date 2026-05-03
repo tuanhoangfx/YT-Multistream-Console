@@ -11,6 +11,7 @@
   --surface: #1f2937;
   --surface-2: #242f40;
   --surface-3: #2b3950;
+  --input: #30323d;
   --border: #3d4d63;
   --border-soft: #334155;
   --text: #f8fafc;
@@ -830,4 +831,360 @@
   --workflow-icon-start: #22d3ee !important;
   --workflow-icon-end: #6366f1 !important;
   --workflow-icon-ring: rgb(99 102 241 / 0.54) !important;
+}
+
+/*
+  -----------------------------------------------------------------------------
+  Compact datetime field — see E:\Dev\Rules\standards\Datetime_Picker_Standard.md
+  (canonical copy lives under Dev\Rules\standards\workspace-design-base.css).
+  -----------------------------------------------------------------------------
+*/
+
+.schedule-datetime {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.schedule-datetime-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  width: 100%;
+  min-height: var(--datetime-field-height, var(--control-height-compact, 32px));
+  height: var(--datetime-field-height, var(--control-height-compact, 32px));
+  padding: 0 30px 0 9px;
+  position: relative;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-3) 76%, transparent), var(--input));
+  border-radius: 7px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.035),
+    0 0 0 1px color-mix(in srgb, var(--border) 88%, var(--accent));
+  font-family: inherit;
+  font-size: var(--fs-body, 12px);
+  font-weight: var(--fw-body-strong, 760);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    box-shadow 200ms ease,
+    background 180ms ease;
+}
+
+.schedule-datetime-trigger:hover {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 0 0 1px color-mix(in srgb, var(--accent) 36%, var(--border));
+}
+
+.schedule-datetime-trigger.open {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.045),
+    0 0 0 1px color-mix(in srgb, var(--accent) 46%, var(--border));
+}
+
+.schedule-datetime-trigger:focus-visible {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.045),
+    0 0 0 2px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+.schedule-datetime-trigger-calendar {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--accent-2) 78%, var(--muted));
+}
+
+.schedule-datetime-trigger-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.schedule-datetime-trigger-text.is-placeholder {
+  color: var(--muted);
+  font-weight: 720;
+}
+
+.schedule-datetime-trigger-chevron {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  transform: translateY(-50%);
+  display: block;
+  opacity: 0.78;
+  pointer-events: none;
+  color: var(--muted);
+  transition: transform 160ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.schedule-datetime-trigger.open .schedule-datetime-trigger-chevron {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.schedule-datetime-popover {
+  position: absolute;
+  left: 0;
+  top: auto;
+  bottom: calc(100% + 8px);
+  z-index: 56;
+  display: flex;
+  flex-direction: column;
+  min-width: min(258px, 92vw);
+  max-width: 272px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, rgb(255 255 255 / 0.04));
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--surface-2) 96%, rgb(14 17 26)),
+    color-mix(in srgb, var(--surface) 88%, rgb(12 14 22))
+  );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent),
+    0 -14px 40px rgb(0 0 0 / 0.48),
+    0 -4px 16px rgb(0 0 0 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.025),
+    0 -52px 64px -36px color-mix(in srgb, var(--violet) 28%, transparent);
+}
+
+.schedule-dp-accent-edge {
+  flex-shrink: 0;
+  height: 3px;
+  margin: 0 -1px -1px;
+  border-radius: 0 0 14px 14px;
+  background: radial-gradient(
+    ellipse 150% 120% at 50% 132%,
+    color-mix(in srgb, var(--violet) 74%, transparent) 0%,
+    color-mix(in srgb, var(--accent-2) 50%, transparent) 44%,
+    transparent 78%
+  );
+  opacity: 0.94;
+}
+
+.schedule-dp-body {
+  flex: 0 1 auto;
+  padding: 9px 11px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.schedule-dp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+
+.schedule-dp-title {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0.03em;
+  color: color-mix(in srgb, var(--text) 93%, transparent);
+}
+
+.schedule-dp-round {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 0;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface-3) 52%, rgb(255 255 255 / 0.02));
+  cursor: pointer;
+  transition:
+    background 170ms cubic-bezier(0.33, 1, 0.68, 1),
+    color 170ms ease,
+    transform 160ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.schedule-dp-round:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-3));
+}
+
+.schedule-dp-round:active {
+  transform: scale(0.93);
+}
+
+.schedule-dp-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
+  padding: 2px 0 0;
+}
+
+.schedule-dp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.schedule-dp-day {
+  display: grid;
+  place-items: center;
+  min-height: 26px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 740;
+  color: color-mix(in srgb, var(--text) 93%, transparent);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 180ms cubic-bezier(0.33, 1, 0.68, 1),
+    color 180ms ease,
+    box-shadow 220ms cubic-bezier(0.33, 1, 0.68, 1),
+    transform 160ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.schedule-dp-pad {
+  min-height: 26px;
+  pointer-events: none;
+}
+
+.schedule-dp-day:hover:not(.selected) {
+  background: color-mix(in srgb, var(--surface-3) 75%, rgb(255 255 255 / 0.02));
+}
+
+.schedule-dp-day.selected {
+  color: rgb(251 251 253);
+  background: radial-gradient(
+    circle at 32% 24%,
+    color-mix(in srgb, var(--accent-2) 94%, transparent) 0%,
+    color-mix(in srgb, var(--violet) 58%, var(--accent-2)) 48%,
+    color-mix(in srgb, var(--accent) 52%, transparent) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.1),
+    0 6px 16px color-mix(in srgb, var(--violet) 26%, transparent),
+    0 0 20px -4px color-mix(in srgb, var(--accent-2) 50%, transparent);
+}
+
+.schedule-dp-day:active {
+  transform: scale(0.93);
+}
+
+.schedule-dp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.schedule-dp-time-selects {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.schedule-dp-time-colon {
+  font-size: 13px;
+  font-weight: 760;
+  color: color-mix(in srgb, var(--muted) 82%, transparent);
+  line-height: 1;
+  padding-bottom: 1px;
+}
+
+.schedule-datetime-popover input.schedule-dp-time-input {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 2.65rem;
+  min-width: 0;
+  min-height: 28px;
+  height: 28px;
+  padding: 0 4px;
+  margin: 0;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, var(--accent));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--surface-3) 88%, rgb(255 255 255 / 0.02)),
+    color-mix(in srgb, var(--input) 92%, rgb(10 12 18))
+  );
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 740;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  cursor: text;
+  outline: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 160ms ease;
+}
+
+.schedule-datetime-popover input.schedule-dp-time-input:focus-visible {
+  border-color: color-mix(in srgb, var(--accent-2) 52%, var(--border));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.schedule-datetime-popover input.schedule-dp-time-input::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.schedule-dp-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  padding-top: 5px;
+  margin-top: 1px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+}
+
+.schedule-dp-link {
+  border: 0;
+  background: none;
+  font-size: 11px;
+  font-weight: 740;
+  color: color-mix(in srgb, var(--accent-2) 88%, var(--text));
+  cursor: pointer;
+  padding: 5px 6px;
+  border-radius: 10px;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.schedule-dp-link:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.schedule-dp-link.schedule-dp-link-danger {
+  color: color-mix(in srgb, var(--danger) 92%, var(--text));
+}
+
+.schedule-dp-link.schedule-dp-link-danger:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }

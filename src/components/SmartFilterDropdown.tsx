@@ -1,12 +1,35 @@
-import { CalendarClock, Check, ChevronDown, CircleCheckBig, FolderOpen, ListFilter, Play, Search, X } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, CircleCheckBig, FolderOpen, ListFilter, Play, Repeat2, Search, Shuffle, X, Zap } from "lucide-react";
 import { GoogleDriveBrandIcon } from "./GoogleDriveBrandIcon";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 export type DropdownOption = {
   value: string;
   label: string;
-  tone?: "neutral" | "all" | "local" | "drive" | "idle" | "running" | "scheduled" | "failed";
+  tone?: "neutral" | "all" | "local" | "drive" | "idle" | "running" | "scheduled" | "failed" | "immediate" | "loop" | "shuffle";
 };
+
+const MENU_ESTIMATE_PX = 248;
+
+function findVerticalScrollContainer(start: HTMLElement | null): HTMLElement {
+  let node: HTMLElement | null = start;
+  while (node) {
+    const { overflowY, overflow } = getComputedStyle(node);
+    const oy = overflowY || overflow;
+    if (node !== document.documentElement && (oy === "auto" || oy === "scroll")) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return document.documentElement;
+}
+
+function viewportAxisBounds(scrollRoot: HTMLElement) {
+  if (scrollRoot === document.documentElement) {
+    return { top: 0, bottom: window.innerHeight };
+  }
+  const r = scrollRoot.getBoundingClientRect();
+  return { top: r.top, bottom: r.bottom };
+}
 
 type SmartFilterDropdownProps =
   | {
@@ -15,6 +38,7 @@ type SmartFilterDropdownProps =
       label: string;
       searchLabel: string;
       multiple?: false;
+      triggerTitle?: string;
       onChange: (value: string) => void;
     }
   | {
@@ -23,6 +47,7 @@ type SmartFilterDropdownProps =
       label: string;
       searchLabel: string;
       multiple: true;
+      triggerTitle?: string;
       onChange: (value: string[]) => void;
     };
 
@@ -30,6 +55,9 @@ function DropdownOptionMarker({ tone }: { tone?: DropdownOption["tone"] }) {
   if (!tone || tone === "neutral") return null;
   if (tone === "all") return <ListFilter size={13} className={`dropdown-option-icon ${tone}`} />;
   if (tone === "idle") return <CircleCheckBig size={13} className={`dropdown-option-icon ${tone}`} />;
+  if (tone === "immediate") return <Zap size={13} className={`dropdown-option-icon ${tone}`} />;
+  if (tone === "loop") return <Repeat2 size={13} className={`dropdown-option-icon ${tone}`} />;
+  if (tone === "shuffle") return <Shuffle size={13} className={`dropdown-option-icon ${tone}`} />;
   if (tone === "running") return <Play size={13} className={`dropdown-option-icon ${tone}`} />;
   if (tone === "scheduled") return <CalendarClock size={13} className={`dropdown-option-icon ${tone}`} />;
   if (tone === "failed") return <X size={13} className={`dropdown-option-icon ${tone}`} />;
@@ -44,10 +72,14 @@ export function SmartFilterDropdown({
   label,
   searchLabel,
   multiple = false,
+  triggerTitle,
   onChange
 }: SmartFilterDropdownProps) {
   const [open, setOpen] = useState(false);
+  const [menuOpensUp, setMenuOpensUp] = useState(false);
   const [search, setSearch] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const filteredOptions = options.filter((option) => option.label.toLowerCase().includes(search.trim().toLowerCase()));
   const selectedValues = Array.isArray(value) ? value : [value];
   const selectedOptions = options.filter((option) => selectedValues.includes(option.value));
@@ -66,17 +98,53 @@ export function SmartFilterDropdown({
     return selectedValues.includes(optionValue);
   }
 
+  function computeMenuPlacement() {
+    const btn = triggerRef.current;
+    if (!btn || !rootRef.current) return;
+    const scrollRoot = findVerticalScrollContainer(rootRef.current);
+    const tt = btn.getBoundingClientRect();
+    const { top: srTop, bottom: srBottom } = viewportAxisBounds(scrollRoot);
+    const edgePad = 8;
+    const spaceBelow = srBottom - tt.bottom - edgePad;
+    const spaceAbove = tt.top - srTop - edgePad;
+    const need = MENU_ESTIMATE_PX;
+    const openUp = spaceBelow < need && spaceAbove > spaceBelow;
+    setMenuOpensUp(openUp);
+  }
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    computeMenuPlacement();
+    const scrollRoot = findVerticalScrollContainer(rootRef.current);
+    scrollRoot.addEventListener("scroll", computeMenuPlacement, { passive: true });
+    window.addEventListener("scroll", computeMenuPlacement, { passive: true });
+    window.addEventListener("resize", computeMenuPlacement);
+    return () => {
+      scrollRoot.removeEventListener("scroll", computeMenuPlacement);
+      window.removeEventListener("scroll", computeMenuPlacement);
+      window.removeEventListener("resize", computeMenuPlacement);
+    };
+  }, [open, filteredOptions.length]);
+
   return (
     <div
+      ref={rootRef}
       className={open ? "smart-dropdown open" : "smart-dropdown"}
       onBlur={(event) => {
         if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) {
           setOpen(false);
           setSearch("");
+          setMenuOpensUp(false);
         }
       }}
     >
-      <button type="button" className="smart-dropdown-trigger" onClick={() => setOpen((current) => !current)}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="smart-dropdown-trigger"
+        title={triggerTitle || undefined}
+        onClick={() => setOpen((current) => !current)}
+      >
         <span className={triggerTone ? `dropdown-trigger-label ${triggerTone}` : "dropdown-trigger-label"}>
           <DropdownOptionMarker tone={triggerTone} />
           {triggerLabel}
@@ -84,7 +152,7 @@ export function SmartFilterDropdown({
         <ChevronDown size={15} className="dropdown-chevron" />
       </button>
       {open && (
-        <div className="smart-dropdown-menu">
+        <div className={`smart-dropdown-menu ${menuOpensUp ? "menu-above" : "menu-below"}`}>
           <label className="smart-dropdown-search">
             <Search size={15} />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={searchLabel} autoFocus />
