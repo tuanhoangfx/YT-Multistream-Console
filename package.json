@@ -1,6 +1,6 @@
 {
   "name": "yt-multistream-console",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "private": true,
   "description": "Desktop console for multi-channel YouTube livestream from local or Google Drive source.",
   "author": "YT Multistream Console",
@@ -50,6 +50,7 @@
     "@vitejs/plugin-react": "^5.1.1",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
+    "debug": "^4.4.0",
     "electron-updater": "^6.8.3",
     "lucide-react": "^0.561.0",
     "ms": "^2.1.3",

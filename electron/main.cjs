@@ -18,6 +18,11 @@ function serializeUnknown(reason) {
   }
 }
 
+// Log early; avoid letting Electron show the generic "undefined: undefined" main-process dialog for shapeless rejections.
+process.on("uncaughtException", (error) => {
+  console.error("[uncaughtException]", serializeUnknown(error));
+});
+
 process.on("unhandledRejection", (reason) => {
   console.error("[unhandledRejection]", serializeUnknown(reason));
 });
@@ -713,6 +718,7 @@ function bindAppApi() {
     if (!app.isPackaged) {
       return { ok: false, message: "Updates are only available in the packaged app." };
     }
+    initAutoUpdaterHooks();
     try {
       const result = await autoUpdater.checkForUpdates();
       return { ok: true, updateInfo: result?.updateInfo || null };
@@ -722,15 +728,22 @@ function bindAppApi() {
   });
 }
 
-function configureAutoUpdater() {
-  if (!app.isPackaged) return;
+let autoUpdaterHooksInstalled = false;
+
+function initAutoUpdaterHooks() {
+  if (!app.isPackaged || autoUpdaterHooksInstalled) return;
+  autoUpdaterHooksInstalled = true;
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.disableDifferentialDownload = true;
 
   autoUpdater.on("error", (error) => {
-    console.error("Auto update failed:", formatUpdaterError(error));
+    try {
+      console.error("Auto update failed:", formatUpdaterError(error));
+    } catch {
+      // Never let listener throw (could surface as a blank Electron error dialog).
+    }
   });
 
   autoUpdater.on("update-available", (info) => {
@@ -740,21 +753,29 @@ function configureAutoUpdater() {
   autoUpdater.on("update-downloaded", (info) => {
     console.log("Update downloaded:", info?.version);
   });
+}
 
-  // Avoid checkForUpdatesAndNotify(): internally chains downloadPromise without .catch(),
-  // which can surface as Electron "undefined: undefined" dialogs on failures or flaky Notification APIs.
-  void (async () => {
-    try {
-      const result = await autoUpdater.checkForUpdates();
-      const downloadPromise = result?.downloadPromise;
-      if (downloadPromise == null) return;
-      await downloadPromise.catch((error) =>
-        console.error("Auto-update download failed:", formatUpdaterError(error))
-      );
-    } catch (error) {
-      console.error("Auto-update check failed:", formatUpdaterError(error));
-    }
-  })();
+async function runAutoUpdateCheckOnce() {
+  if (!app.isPackaged) return;
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    const downloadPromise = result?.downloadPromise;
+    if (downloadPromise == null) return;
+    await downloadPromise.catch((error) =>
+      console.error("Auto-update download failed:", formatUpdaterError(error))
+    );
+  } catch (error) {
+    console.error("Auto-update check failed:", formatUpdaterError(error));
+  }
+}
+
+/** First update check long after UI is up — avoids updater churn during early main-process init. */
+function scheduleDeferredAutoUpdateCheck() {
+  if (!app.isPackaged) return;
+  initAutoUpdaterHooks();
+  setTimeout(() => {
+    void runAutoUpdateCheckOnce();
+  }, 90_000);
 }
 
 function bindStreamingApi() {
@@ -988,22 +1009,18 @@ function createWindow() {
   }
 }
 
-/** Defer updater until after first load — avoids Electron main churn / flaky feed during bootstrap. */
-function scheduleDeferredAutoUpdater(targetWindow) {
-  if (!app.isPackaged || !targetWindow) return;
-  targetWindow.webContents.once("did-finish-load", () => {
-    setTimeout(() => configureAutoUpdater(), 2500);
-  });
-}
-
 app.whenReady().then(() => {
-  if (process.platform === "win32") {
-    app.setAppUserModelId("com.yt.multistream-console");
+  try {
+    if (process.platform === "win32") {
+      app.setAppUserModelId("com.yt.multistream-console");
+    }
+    bindStreamingApi();
+    bindAppApi();
+    createWindow();
+    scheduleDeferredAutoUpdateCheck();
+  } catch (error) {
+    console.error("Startup failed:", serializeUnknown(error));
   }
-  bindStreamingApi();
-  bindAppApi();
-  createWindow();
-  scheduleDeferredAutoUpdater(mainWindow);
 });
 
 app.on("window-all-closed", () => {
