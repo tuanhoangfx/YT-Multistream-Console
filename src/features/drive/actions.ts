@@ -1,5 +1,7 @@
 import { driveFileKey, hasDriveValue, isValidDriveLibraryFileUrl, type DriveLibraryItem, type DriveMetadataStatus } from "./drive-utils";
 
+export const DRIVE_LIBRARY_LIMIT = 5000;
+
 export function appendDriveLinks(items: DriveLibraryItem[], urls: string[], groupDraft: string) {
   const existingUrls = new Set(items.map((item) => driveFileKey(item.url)));
   const group = groupDraft.trim() || "Ungrouped";
@@ -26,7 +28,7 @@ export function appendDriveLinks(items: DriveLibraryItem[], urls: string[], grou
       metadataMessage: "Waiting for metadata scan.",
       metadataChecked: false
     }));
-  return [...nextItems, ...items].slice(0, 200);
+  return [...nextItems, ...items].slice(0, DRIVE_LIBRARY_LIMIT);
 }
 
 export function removeDriveLinkById(items: DriveLibraryItem[], id: string) {

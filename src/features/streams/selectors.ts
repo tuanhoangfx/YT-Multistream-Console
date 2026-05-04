@@ -15,7 +15,8 @@ export function filterLibraryRows(
   driveLibrary: DriveLibraryItem[],
   librarySearch: string,
   libraryStatusSelection: string[],
-  libraryResolutionSelection: string[]
+  libraryResolutionSelection: string[],
+  libraryGroupSelection: string[] = []
 ) {
   const term = librarySearch.trim().toLowerCase();
   return driveLibrary.filter((item) => {
@@ -31,7 +32,8 @@ export function filterLibraryRows(
       item.addedAt.toLowerCase().includes(term);
     const matchesStatus = libraryStatusSelection.length === 0 || libraryStatusSelection.includes(item.metadataStatus);
     const matchesResolution = libraryResolutionSelection.length === 0 || libraryResolutionSelection.includes(item.resolution);
-    return matchesTerm && matchesStatus && matchesResolution;
+    const matchesGroup = libraryGroupSelection.length === 0 || libraryGroupSelection.includes(item.group || "Ungrouped");
+    return matchesTerm && matchesStatus && matchesResolution && matchesGroup;
   });
 }
 
@@ -39,7 +41,8 @@ export function filterConfigDriveRows(
   driveLibrary: DriveLibraryItem[],
   configDriveSearch: string,
   configDriveStatusSelection: string[],
-  configDriveResolutionSelection: string[]
+  configDriveResolutionSelection: string[],
+  configDriveGroupSelection: string[] = []
 ) {
   const term = configDriveSearch.trim().toLowerCase();
   return driveLibrary.filter((item) => {
@@ -54,6 +57,7 @@ export function filterConfigDriveRows(
       item.metadataStatus.toLowerCase().includes(term);
     const matchesStatus = configDriveStatusSelection.length === 0 || configDriveStatusSelection.includes(item.metadataStatus);
     const matchesResolution = configDriveResolutionSelection.length === 0 || configDriveResolutionSelection.includes(item.resolution);
-    return matchesTerm && matchesStatus && matchesResolution;
+    const matchesGroup = configDriveGroupSelection.length === 0 || configDriveGroupSelection.includes(item.group || "Ungrouped");
+    return matchesTerm && matchesStatus && matchesResolution && matchesGroup;
   });
 }

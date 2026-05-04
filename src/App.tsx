@@ -147,6 +147,28 @@ function parseReleaseLogEntries(markdown: string, maxEntries = 20): ReleaseLogEn
 
 type LogLine = { id: string; time: string; level: "info" | "success" | "error"; message: string };
 
+function formatLiveElapsed(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts = [hours, minutes, seconds].map((value) => String(value).padStart(2, "0"));
+  return parts.join(":");
+}
+
+function getLiveElapsedMs(job: Pick<StreamJob, "status" | "liveStartedAt" | "liveElapsedMs">, nowMs = Date.now()) {
+  if (job.status === "running" && job.liveStartedAt) return Math.max(0, nowMs - job.liveStartedAt);
+  return Math.max(0, job.liveElapsedMs || 0);
+}
+
+function withStoppedLiveTime(job: StreamJob): StreamJob {
+  return {
+    ...job,
+    liveElapsedMs: getLiveElapsedMs(job),
+    liveStartedAt: 0
+  };
+}
+
 export function App() {
   const [view, setView] = useState<View>("streams");
   const [theme, setTheme] = useState<Theme>(readTheme);
@@ -176,11 +198,13 @@ export function App() {
   const [queueStatusFilter, setQueueStatusFilter] = useState<string[]>([]);
   const [queueSourceFilter, setQueueSourceFilter] = useState<string[]>([]);
   const [librarySearch, setLibrarySearch] = useState("");
+  const [librarySelectedGroups, setLibrarySelectedGroups] = useState<string[]>([]);
   const [librarySelectedStatuses, setLibrarySelectedStatuses] = useState<string[]>([]);
   const [librarySelectedResolutions, setLibrarySelectedResolutions] = useState<string[]>([]);
   const [configDriveSearch, setConfigDriveSearch] = useState("");
   const [configDriveSelectedStatuses, setConfigDriveSelectedStatuses] = useState<string[]>([]);
   const [configDriveSelectedResolutions, setConfigDriveSelectedResolutions] = useState<string[]>([]);
+  const [configDriveSelectedGroups, setConfigDriveSelectedGroups] = useState<string[]>([]);
   const [queuePage, setQueuePage] = useState(1);
   const [queuePageSize, setQueuePageSize] = useState(20);
   const [libraryPage, setLibraryPage] = useState(1);
@@ -195,6 +219,7 @@ export function App() {
   const [drivePickerDragging, setDrivePickerDragging] = useState(false);
   const [drivePickerDragAnchorIndex, setDrivePickerDragAnchorIndex] = useState<number | null>(null);
   const [drivePickerDragAdditive, setDrivePickerDragAdditive] = useState(false);
+  const [liveClock, setLiveClock] = useState(Date.now());
 
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || jobs[0];
   const selectedJobDriveUrls = getJobDriveUrls(selectedJob);
@@ -227,16 +252,16 @@ export function App() {
       .filter((row) => !term || row.group.toLowerCase().includes(term));
   }, [driveLibrary, groupSearch, mergedGroupOptions]);
   const libraryRows = useMemo(
-    () => filterLibraryRows(driveLibrary, librarySearch, librarySelectedStatuses, librarySelectedResolutions),
-    [driveLibrary, librarySearch, librarySelectedResolutions, librarySelectedStatuses]
+    () => filterLibraryRows(driveLibrary, librarySearch, librarySelectedStatuses, librarySelectedResolutions, librarySelectedGroups),
+    [driveLibrary, librarySearch, librarySelectedGroups, librarySelectedResolutions, librarySelectedStatuses]
   );
   const libraryTotalPages = Math.max(1, Math.ceil(libraryRows.length / libraryPageSize));
   const libraryPageStart = (libraryPage - 1) * libraryPageSize;
   const libraryPageEnd = Math.min(libraryPageStart + libraryPageSize, libraryRows.length);
   const libraryPagedRows = libraryRows.slice(libraryPageStart, libraryPageEnd);
   const configDriveRows = useMemo(
-    () => filterConfigDriveRows(driveLibrary, configDriveSearch, configDriveSelectedStatuses, configDriveSelectedResolutions),
-    [configDriveSearch, configDriveSelectedResolutions, configDriveSelectedStatuses, driveLibrary]
+    () => filterConfigDriveRows(driveLibrary, configDriveSearch, configDriveSelectedStatuses, configDriveSelectedResolutions, configDriveSelectedGroups),
+    [configDriveSearch, configDriveSelectedGroups, configDriveSelectedResolutions, configDriveSelectedStatuses, driveLibrary]
   );
   const metadataReadyCount = driveLibrary.filter((item) => item.metadataStatus === "ready" || item.metadataStatus === "partial").length;
   const selectedLibraryCount = selectedDriveIds.size;
@@ -277,6 +302,12 @@ export function App() {
   useEffect(() => {
     setManagedGroups((current) => Array.from(new Set(["Default", ...current, ...libraryGroupOptions])));
   }, [libraryGroupOptions]);
+
+  useEffect(() => {
+    if (!jobs.some((job) => job.status === "running")) return;
+    const timer = window.setInterval(() => setLiveClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [jobs]);
 
   useEffect(() => {
     if (!drivePickerDragging && !libraryDragging) return;
@@ -332,7 +363,7 @@ export function App() {
 
   useEffect(() => {
     setLibraryPage(1);
-  }, [librarySearch, librarySelectedResolutions, librarySelectedStatuses]);
+  }, [librarySearch, librarySelectedGroups, librarySelectedResolutions, librarySelectedStatuses]);
 
   useEffect(() => {
     if (libraryPage > libraryTotalPages) setLibraryPage(libraryTotalPages);
@@ -378,7 +409,16 @@ export function App() {
   useEffect(() => {
     const unsubscribe = window.streaming.onJobEvent((event: StreamEvent) => {
       setJobs((items) =>
-        items.map((job) => (job.id === event.jobId ? { ...job, status: event.status || job.status, lastMessage: event.message, updatedAt: now() } : job))
+        items.map((job) => {
+          if (job.id !== event.jobId) return job;
+          const nextStatus = event.status || job.status;
+          const runningPatch =
+            nextStatus === "running" && job.status !== "running"
+              ? { liveStartedAt: Date.now(), liveElapsedMs: 0 }
+              : {};
+          const stoppedJob = job.status === "running" && nextStatus !== "running" ? withStoppedLiveTime(job) : job;
+          return { ...stoppedJob, ...runningPatch, status: nextStatus, lastMessage: event.message, updatedAt: now() };
+        })
       );
       addLog(event.level, `[${event.jobId.slice(0, 8)}] ${event.message}`);
     });
@@ -404,7 +444,6 @@ export function App() {
     metadataLoadingIds,
     setMetadataLoadingIds,
     setDriveLibrary,
-    setError,
     probeDriveLink
   });
 
@@ -444,6 +483,8 @@ export function App() {
       status: "idle",
       publishMode: "immediate",
       scheduledAt: "",
+      liveStartedAt: 0,
+      liveElapsedMs: 0,
       lastMessage: "Ready",
       updatedAt: now()
     };
@@ -459,6 +500,8 @@ export function App() {
       channelName: `${selectedJob.channelName} Copy`,
       status: "idle",
       scheduledAt: "",
+      liveStartedAt: 0,
+      liveElapsedMs: 0,
       lastMessage: "Copied from selected channel",
       updatedAt: now()
     };
@@ -486,12 +529,26 @@ export function App() {
       const validationError = validateStartJob(job, driveUrls);
       if (validationError) throw new Error(validationError);
       await startStreamJob(job);
-      setJobs((items) => items.map((item) => (item.id === job.id ? { ...item, scheduledAt: "" } : item)));
+      setJobs((items) =>
+        items.map((item) =>
+          item.id === job.id
+            ? {
+                ...item,
+                status: "running",
+                scheduledAt: "",
+                liveStartedAt: Date.now(),
+                liveElapsedMs: 0,
+                lastMessage: "Streaming started",
+                updatedAt: now()
+              }
+            : item
+        )
+      );
     } catch (startError) {
       const message = startError instanceof Error ? startError.message : "Unable to start stream.";
       setError(message);
       addLog("error", message);
-      setJobs((items) => items.map((item) => (item.id === job.id ? { ...item, status: "failed", lastMessage: message, updatedAt: now() } : item)));
+      setJobs((items) => items.map((item) => (item.id === job.id ? { ...withStoppedLiveTime(item), status: "failed", lastMessage: message, updatedAt: now() } : item)));
     } finally {
       setBusy(false);
     }
@@ -500,7 +557,7 @@ export function App() {
   async function stopOne(jobId: string) {
     try {
       await stopStreamJob(jobId);
-      setJobs((items) => items.map((item) => (item.id === jobId ? { ...item, ...buildStoppedUpdate("Stopped") } : item)));
+      setJobs((items) => items.map((item) => (item.id === jobId ? { ...withStoppedLiveTime(item), ...buildStoppedUpdate("Stopped") } : item)));
     } catch (stopError) {
       addLog("error", stopError instanceof Error ? stopError.message : "Unable to stop stream.");
     }
@@ -512,7 +569,7 @@ export function App() {
 
   async function stopAll() {
     await stopAllStreams();
-    setJobs((items) => items.map((item) => ({ ...item, ...buildStoppedUpdate("Stopped all") })));
+    setJobs((items) => items.map((item) => ({ ...withStoppedLiveTime(item), ...buildStoppedUpdate("Stopped all") })));
     addLog("info", "All streams stopped");
   }
 
@@ -774,8 +831,8 @@ export function App() {
     { value: "drive", label: "Google Drive", tone: "drive" }
   ];
   const drivePlayModeOptions: DropdownOption[] = [
-    { value: "sequential", label: "Loop", tone: "loop" },
-    { value: "random", label: "Random", tone: "shuffle" }
+    { value: "sequential", label: "Loop all", tone: "loop" },
+    { value: "random", label: "Shuffle loop", tone: "shuffle" }
   ];
   const publishModeOptions: DropdownOption[] = [
     { value: "immediate", label: "Publish", tone: "immediate" },
@@ -800,6 +857,16 @@ export function App() {
         dotTone: toneFromSeed(`drive-resolution:${resolution}`)
       })),
     [libraryResolutionOptions]
+  );
+  const libraryDriveGroupFilterOptions = useMemo(
+    () =>
+      libraryGroupOptions.map((group) => ({
+        value: group,
+        label: group,
+        tone: "platform" as const,
+        dotTone: toneFromSeed(`drive-group:${group}`)
+      })),
+    [libraryGroupOptions]
   );
   return (
     <div className={`app-shell theme-${theme}`}>
@@ -966,6 +1033,12 @@ export function App() {
                       </span>
                     </th>
                     <th>
+                      <span className="table-col-head table-col-proxy">
+                        <Clock3 size={13} />
+                        Live time
+                      </span>
+                    </th>
+                    <th>
                       <span className="table-col-head table-col-note">
                         <MessageCircle size={13} />
                         Last message
@@ -1001,6 +1074,7 @@ export function App() {
                       <td>
                         <StatusBadge status={job.status} />
                       </td>
+                      <td className="queue-updated">{formatLiveElapsed(getLiveElapsedMs(job, liveClock))}</td>
                       <td className="queue-message">{job.lastMessage}</td>
                       <td className="queue-updated">{job.updatedAt}</td>
                       <td
@@ -1022,7 +1096,7 @@ export function App() {
                   ))}
                   {queueRows.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="library-empty">
+                      <td colSpan={7} className="library-empty">
                         No channels match current filters.
                       </td>
                     </tr>
@@ -1339,6 +1413,15 @@ export function App() {
                 <input value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder="Search file, group, Drive link…" />
               </label>
               <MultiSelectDropdown
+                values={librarySelectedGroups}
+                options={libraryDriveGroupFilterOptions}
+                label="Group"
+                searchLabel="Search groups..."
+                summaryLabel="groups"
+                defaultTone="platform"
+                onChange={setLibrarySelectedGroups}
+              />
+              <MultiSelectDropdown
                 values={librarySelectedStatuses}
                 options={libraryDriveMetadataStatusFilterOptions}
                 label="Status"
@@ -1611,6 +1694,15 @@ export function App() {
                   <Search size={15} />
                   <input value={configDriveSearch} onChange={(event) => setConfigDriveSearch(event.target.value)} placeholder="Search file, group, Drive link…" autoFocus />
                 </label>
+                <MultiSelectDropdown
+                  values={configDriveSelectedGroups}
+                  options={libraryDriveGroupFilterOptions}
+                  label="Group"
+                  searchLabel="Search groups..."
+                  summaryLabel="groups"
+                  defaultTone="platform"
+                  onChange={setConfigDriveSelectedGroups}
+                />
                 <MultiSelectDropdown
                   values={configDriveSelectedStatuses}
                   options={libraryDriveMetadataStatusFilterOptions}

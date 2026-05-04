@@ -17,6 +17,8 @@ export type StreamJob = {
   status: JobStatus;
   publishMode?: "immediate" | "scheduled";
   scheduledAt?: string;
+  liveStartedAt?: number;
+  liveElapsedMs?: number;
   lastMessage: string;
   updatedAt: string;
 };

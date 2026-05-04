@@ -35,6 +35,8 @@ function defaultJobs(): StreamJob[] {
       status: "idle",
       publishMode: "immediate",
       scheduledAt: "",
+      liveStartedAt: 0,
+      liveElapsedMs: 0,
       lastMessage: "Ready",
       updatedAt: now()
     }
@@ -65,6 +67,8 @@ export function readJobs(): StreamJob[] {
       status: item.status === "scheduled" || item.status === "running" || item.status === "failed" || item.status === "idle" ? item.status : "idle",
       publishMode: item.publishMode === "scheduled" ? "scheduled" : "immediate",
       scheduledAt: item.scheduledAt || "",
+      liveStartedAt: Number.isFinite(item.liveStartedAt) && item.status === "running" ? item.liveStartedAt : 0,
+      liveElapsedMs: Number.isFinite(item.liveElapsedMs) ? Math.max(0, item.liveElapsedMs || 0) : 0,
       lastMessage: item.lastMessage || "Ready",
       updatedAt: item.updatedAt || now()
     }));

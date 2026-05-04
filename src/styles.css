@@ -793,6 +793,20 @@ h2 {
   align-items: center;
 }
 
+.library-toolbar,
+.drive-picker-toolbar {
+  grid-template-columns: minmax(0, 1fr) var(--dropdown-width-filter) var(--dropdown-width-filter) var(--dropdown-width-filter);
+}
+
+:root .shell .queue-filters.profile-filters.table-header-filters {
+  grid-template-columns: minmax(0, 1fr) var(--dropdown-width-filter) var(--dropdown-width-filter);
+}
+
+:root .shell .library-toolbar.profile-filters.table-header-filters,
+:root .shell .drive-picker-toolbar.profile-filters.table-header-filters {
+  grid-template-columns: minmax(0, 1fr) var(--dropdown-width-filter) var(--dropdown-width-filter) var(--dropdown-width-filter);
+}
+
 .profile-filters .input.with-icon {
   width: 100%;
 }
@@ -1636,7 +1650,7 @@ h2 {
 
 .drive-picker-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px 180px;
+  grid-template-columns: minmax(0, 1fr) var(--dropdown-width-filter) var(--dropdown-width-filter) var(--dropdown-width-filter);
   gap: 8px;
   align-items: center;
   min-width: 0;
@@ -2689,6 +2703,20 @@ select:focus {
   .queue-filters,
   .library-toolbar {
     grid-template-columns: minmax(0, 1fr) var(--dropdown-width-filter-compact) var(--dropdown-width-filter-compact);
+  }
+
+  .library-toolbar,
+  .drive-picker-toolbar {
+    grid-template-columns: minmax(0, 1fr) var(--dropdown-width-filter-compact) var(--dropdown-width-filter-compact) var(--dropdown-width-filter-compact);
+  }
+
+  :root .shell .queue-filters.profile-filters.table-header-filters {
+    grid-template-columns: minmax(0, 1fr) var(--dropdown-width-filter-compact) var(--dropdown-width-filter-compact);
+  }
+
+  :root .shell .library-toolbar.profile-filters.table-header-filters,
+  :root .shell .drive-picker-toolbar.profile-filters.table-header-filters {
+    grid-template-columns: minmax(0, 1fr) var(--dropdown-width-filter-compact) var(--dropdown-width-filter-compact) var(--dropdown-width-filter-compact);
   }
 
   .drive-input-grid {

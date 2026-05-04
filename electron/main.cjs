@@ -4,7 +4,6 @@ const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg");
 
 function serializeUnknown(reason) {
   if (reason == null) return "unknown (null or undefined)";
@@ -29,6 +28,8 @@ process.on("unhandledRejection", (reason) => {
 const jobs = new Map();
 let mainWindow = null;
 let cachedAutoUpdater;
+const DRIVE_FETCH_TIMEOUT_MS = 15000;
+const FFMPEG_METADATA_PROBE_TIMEOUT_MS = 15000;
 
 function getAutoUpdater() {
   if (!app.isPackaged) return null;
@@ -67,6 +68,11 @@ function extractDriveFileId(rawUrl) {
 function driveFileKey(rawUrl) {
   const id = extractDriveFileId(rawUrl);
   return id || "";
+}
+
+function driveFileFallbackName(rawUrl) {
+  const id = extractDriveFileId(rawUrl);
+  return id ? `Drive file ${id.slice(0, 10)}` : "Drive video";
 }
 
 /** Matches renderer `isValidDriveLibraryFileUrl`: file/play links only; no folder views. */
@@ -324,6 +330,16 @@ function parseCookieHeader(setCookieValue) {
     .join("; ");
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = DRIVE_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function closeResponseBody(response) {
   try {
     await response.body?.cancel();
@@ -359,7 +375,7 @@ async function resolveDriveDownload(rawUrl) {
   const headers = {
     "User-Agent": "Mozilla/5.0 YT-Multistream-Console"
   };
-  const response = await fetch(initialUrl, { headers, redirect: "follow" });
+  const response = await fetchWithTimeout(initialUrl, { headers, redirect: "follow" });
   if (!response.ok) throw new Error(`Unable to read Drive file (${response.status}).`);
 
   const disposition = response.headers.get("content-disposition") || "";
@@ -379,7 +395,7 @@ async function resolveDriveDownload(rawUrl) {
     return { url: initialUrl, initialUrl, fileName, size, cookie };
   }
 
-  const confirmed = await fetch(confirmUrl, { headers: cookie ? { ...headers, Cookie: cookie } : headers, redirect: "follow" });
+  const confirmed = await fetchWithTimeout(confirmUrl, { headers: cookie ? { ...headers, Cookie: cookie } : headers, redirect: "follow" });
   if (!confirmed.ok) throw new Error(`Unable to confirm Drive download (${confirmed.status}).`);
   const confirmedDisposition = confirmed.headers.get("content-disposition") || "";
   const confirmedName = parseHeaderFileName(confirmedDisposition);
@@ -397,7 +413,7 @@ async function resolveDriveDownload(rawUrl) {
 
 async function getDriveFileName(rawUrl) {
   try {
-    const response = await fetch(rawUrl, {
+    const response = await fetchWithTimeout(rawUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 YT-Multistream-Console"
       }
@@ -482,7 +498,7 @@ function runFfmpegMetadataProbe(input, cookie) {
         // Ignore probe timeout race.
       }
       finish();
-    }, 30000);
+    }, FFMPEG_METADATA_PROBE_TIMEOUT_MS);
     child.stderr.on("data", (buffer) => {
       stderr += String(buffer || "");
     });
@@ -582,8 +598,8 @@ function escapeConcatPath(value) {
 }
 
 async function createDrivePlaylistInput(urls, playMode) {
-  const orderedUrls = playMode === "random" ? shuffleItems(urls) : urls;
-  const normalizedUrls = orderedUrls.map((url) => normalizeDriveUrl(url));
+  const sourceUrls = urls.map((url) => normalizeDriveUrl(url)).filter(Boolean);
+  const normalizedUrls = playMode === "random" ? shuffleItems(sourceUrls) : sourceUrls;
   const listBody = ["ffconcat version 1.0", ...normalizedUrls.map((url) => `file '${escapeConcatPath(url)}'`)].join(os.EOL);
   const listPath = path.join(os.tmpdir(), `yt-multistream-drive-${Date.now()}-${Math.random().toString(36).slice(2)}.ffconcat`);
   await fs.writeFile(listPath, listBody, "utf8");
@@ -699,12 +715,31 @@ function createFfmpegArgs(input, outputs) {
 }
 
 function resolveFfmpegBinary() {
+  const binaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
   const fallback = "ffmpeg";
-  if (!ffmpegInstaller?.path) return fallback;
-  if (ffmpegInstaller.path.includes("app.asar")) {
-    return ffmpegInstaller.path.replace("app.asar", "app.asar.unpacked");
+  const candidates = [];
+
+  if (app.isPackaged) {
+    candidates.push(path.join(process.resourcesPath, "bin", binaryName));
   }
-  return ffmpegInstaller.path;
+
+  try {
+    const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg");
+    if (ffmpegInstaller?.path) {
+      candidates.push(ffmpegInstaller.path.replace("app.asar", "app.asar.unpacked"));
+      candidates.push(ffmpegInstaller.path);
+    }
+  } catch (error) {
+    console.error("Unable to resolve @ffmpeg-installer/ffmpeg:", serializeUnknown(error));
+  }
+
+  for (const candidate of candidates) {
+    if (candidate && fsSync.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return fallback;
 }
 
 const ffmpegBinary = resolveFfmpegBinary();
@@ -880,7 +915,7 @@ function bindStreamingApi() {
 
     jobs.set(jobId, { process: child, startedAt: Date.now(), channelName, cleanupPaths: playlist?.cleanupPaths || [] });
       const outputLabel = outputs.length > 1 ? `${outputs.length} outputs` : "primary output";
-      const inputLabel = sourceType === "drive" && driveUrls.length > 1 ? `${driveUrls.length} Drive videos, ${drivePlayMode === "random" ? "random" : "sequential"} mode` : "single source";
+      const inputLabel = sourceType === "drive" && driveUrls.length > 1 ? `${driveUrls.length} Drive videos, ${drivePlayMode === "random" ? "shuffle loop" : "loop all"} mode` : "single source";
       broadcast({ jobId, level: "success", message: `Streaming started for ${channelName} (${outputLabel}, ${inputLabel})`, status: "running" });
     return { ok: true };
   });
@@ -928,7 +963,7 @@ function bindStreamingApi() {
 
     for (const url of scanUrls) {
       try {
-        const response = await fetch(url, { headers, redirect: "follow" });
+        const response = await fetchWithTimeout(url, { headers, redirect: "follow" });
         if (!response.ok) continue;
         const html = await response.text();
         signInRequired = signInRequired || driveHtmlRequiresSignIn(html);
@@ -958,11 +993,12 @@ function bindStreamingApi() {
     const duration = media.duration || "-";
     const resolution = media.resolution || "-";
     const size = media.size || "-";
+    const displayName = media.name || name || driveFileFallbackName(url);
     const hasMetadata = duration !== "-" || resolution !== "-";
-    const hasPartialMetadata = hasMetadata || size !== "-" || Boolean(media.name);
+    const hasPartialMetadata = hasMetadata || size !== "-" || Boolean(displayName && displayName !== "Drive video");
     return {
       ok: true,
-      name: media.name || name || "Drive video",
+      name: displayName,
       duration,
       resolution,
       size,

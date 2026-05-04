@@ -233,7 +233,7 @@
 }
 
 :root .shell .profile-filters.table-header-filters {
-  grid-template-columns: minmax(0, 1fr) 180px 180px;
+  grid-template-columns: minmax(0, 1fr) 180px 180px 180px;
 }
 
 :root .shell .table-header-actions {
