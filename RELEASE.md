@@ -2,6 +2,34 @@
 
 Release and distribution process for `YT Multistream Console`.
 
+## 2026-05-05 - Code Update 0.1.18
+
+- Version: `0.1.18`
+- Timestamp: 2026-05-05 00:10 (UTC+7)
+- Commit: `88ef5a9`
+- Type: Feature/Fix
+- Status: Verified
+
+### Changes
+
+- Updated source version to `0.1.18` and synced release metadata.
+- Updated `.github/workflows/_reusable-release.yml`.
+- Updated `.gitignore`.
+- Updated `electron/main.cjs`.
+- Updated `index.html`.
+- Updated `pnpm-lock.yaml`.
+- Additional updated files: +3.
+
+### Verification
+
+```powershell
+pnpm sync:all
+pnpm build
+```
+
+Result: passed.
+
+
 ## 2026-05-04 - Code Update 0.1.17
 
 - Version: `0.1.17`

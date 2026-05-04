@@ -1,6 +1,6 @@
 {
   "name": "yt-multistream-console",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "private": true,
   "description": "Desktop console for multi-channel YouTube livestream from local or Google Drive source.",
   "author": "YT Multistream Console",
@@ -37,9 +37,10 @@
     "rollback:list": "git tag --list \"v*\" --sort=-v:refname",
     "rollback:restore": "node scripts/rollback-to-tag.mjs",
     "hooks:install": "node scripts/install-git-hooks.mjs",
-    "pack": "corepack pnpm build && electron-builder --dir",
-    "dist": "corepack pnpm build && electron-builder --win nsis-web --publish never",
-    "release": "corepack pnpm build && electron-builder --win nsis-web --publish always",
+    "assets:icon": "node scripts/render-brand-icon.cjs",
+    "pack": "pnpm assets:icon && corepack pnpm build && electron-builder --dir",
+    "dist": "pnpm assets:icon && corepack pnpm build && electron-builder --win nsis-web --publish never",
+    "release": "pnpm assets:icon && corepack pnpm build && electron-builder --win nsis-web --publish always",
     "preview": "vite preview --host 127.0.0.1 --port 5174",
     "start": "electron .",
     "postinstall": "pnpm hooks:install"
@@ -65,7 +66,9 @@
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "png-to-ico": "^3.0.1",
     "prettier": "^3.8.3",
+    "sharp": "^0.34.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.59.1",
     "vitest": "^4.1.5",
@@ -81,11 +84,13 @@
     "files": [
       "dist/**",
       "electron/**",
+      "build/icons/**",
       "package.json",
       "RELEASE.md"
     ],
     "win": {
-      "target": "nsis-web"
+      "target": "nsis-web",
+      "icon": "build/icons/app.ico"
     },
     "nsisWeb": {
       "oneClick": false,
@@ -106,7 +111,8 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
-      "esbuild"
+      "esbuild",
+      "sharp"
     ]
   }
 }

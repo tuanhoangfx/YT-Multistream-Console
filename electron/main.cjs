@@ -2,9 +2,25 @@ const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs/promises");
+const fsSync = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg");
+
+function serializeUnknown(reason) {
+  if (reason == null) return "unknown (null or undefined)";
+  if (reason instanceof Error) return reason.stack || reason.message || "Error";
+  if (typeof reason === "string") return reason;
+  try {
+    return JSON.stringify(reason);
+  } catch {
+    return String(reason);
+  }
+}
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", serializeUnknown(reason));
+});
 
 const jobs = new Map();
 let mainWindow = null;
@@ -711,6 +727,7 @@ function configureAutoUpdater() {
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.disableDifferentialDownload = true;
 
   autoUpdater.on("error", (error) => {
     console.error("Auto update failed:", formatUpdaterError(error));
@@ -947,6 +964,8 @@ function bindStreamingApi() {
 }
 
 function createWindow() {
+  const windowsIconPath = path.join(__dirname, "..", "build", "icons", "app.ico");
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -954,6 +973,7 @@ function createWindow() {
     minHeight: 760,
     title: "YT Multistream Console",
     backgroundColor: "#0f1115",
+    ...(fsSync.existsSync(windowsIconPath) ? { icon: windowsIconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -968,11 +988,22 @@ function createWindow() {
   }
 }
 
+/** Defer updater until after first load — avoids Electron main churn / flaky feed during bootstrap. */
+function scheduleDeferredAutoUpdater(targetWindow) {
+  if (!app.isPackaged || !targetWindow) return;
+  targetWindow.webContents.once("did-finish-load", () => {
+    setTimeout(() => configureAutoUpdater(), 2500);
+  });
+}
+
 app.whenReady().then(() => {
+  if (process.platform === "win32") {
+    app.setAppUserModelId("com.yt.multistream-console");
+  }
   bindStreamingApi();
   bindAppApi();
   createWindow();
-  configureAutoUpdater();
+  scheduleDeferredAutoUpdater(mainWindow);
 });
 
 app.on("window-all-closed", () => {

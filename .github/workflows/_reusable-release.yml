@@ -45,4 +45,6 @@ jobs:
       - name: Publish Windows installer to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: corepack pnpm exec electron-builder --win nsis-web --publish always
+        run: |
+          pnpm assets:icon
+          corepack pnpm exec electron-builder --win nsis-web --publish always
