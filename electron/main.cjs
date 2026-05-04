@@ -1,5 +1,4 @@
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
-const { autoUpdater } = require("electron-updater");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
@@ -29,6 +28,23 @@ process.on("unhandledRejection", (reason) => {
 
 const jobs = new Map();
 let mainWindow = null;
+let cachedAutoUpdater;
+
+function getAutoUpdater() {
+  if (!app.isPackaged) return null;
+  if (cachedAutoUpdater !== undefined) return cachedAutoUpdater;
+  try {
+    const loaded = require("electron-updater");
+    cachedAutoUpdater = loaded?.autoUpdater || null;
+    if (!cachedAutoUpdater) {
+      console.error("electron-updater loaded but autoUpdater export is missing.");
+    }
+  } catch (error) {
+    cachedAutoUpdater = null;
+    console.error("Unable to initialize electron-updater:", serializeUnknown(error));
+  }
+  return cachedAutoUpdater;
+}
 
 function normalizeDriveUrl(rawUrl) {
   const value = String(rawUrl || "").trim();
@@ -718,9 +734,13 @@ function bindAppApi() {
     if (!app.isPackaged) {
       return { ok: false, message: "Updates are only available in the packaged app." };
     }
+    const updater = getAutoUpdater();
+    if (!updater) {
+      return { ok: false, message: "Updater is unavailable in this build." };
+    }
     initAutoUpdaterHooks();
     try {
-      const result = await autoUpdater.checkForUpdates();
+      const result = await updater.checkForUpdates();
       return { ok: true, updateInfo: result?.updateInfo || null };
     } catch (error) {
       return { ok: false, message: formatUpdaterError(error) };
@@ -732,13 +752,15 @@ let autoUpdaterHooksInstalled = false;
 
 function initAutoUpdaterHooks() {
   if (!app.isPackaged || autoUpdaterHooksInstalled) return;
+  const updater = getAutoUpdater();
+  if (!updater) return;
   autoUpdaterHooksInstalled = true;
 
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.disableDifferentialDownload = true;
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.disableDifferentialDownload = true;
 
-  autoUpdater.on("error", (error) => {
+  updater.on("error", (error) => {
     try {
       console.error("Auto update failed:", formatUpdaterError(error));
     } catch {
@@ -746,19 +768,21 @@ function initAutoUpdaterHooks() {
     }
   });
 
-  autoUpdater.on("update-available", (info) => {
+  updater.on("update-available", (info) => {
     console.log("Update available:", info?.version);
   });
 
-  autoUpdater.on("update-downloaded", (info) => {
+  updater.on("update-downloaded", (info) => {
     console.log("Update downloaded:", info?.version);
   });
 }
 
 async function runAutoUpdateCheckOnce() {
   if (!app.isPackaged) return;
+  const updater = getAutoUpdater();
+  if (!updater) return;
   try {
-    const result = await autoUpdater.checkForUpdates();
+    const result = await updater.checkForUpdates();
     const downloadPromise = result?.downloadPromise;
     if (downloadPromise == null) return;
     await downloadPromise.catch((error) =>

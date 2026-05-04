@@ -2,6 +2,30 @@
 
 Release and distribution process for `YT Multistream Console`.
 
+## 2026-05-05 - Code Update 0.1.21
+
+- Version: `0.1.21`
+- Timestamp: 2026-05-05 00:38 (UTC+7)
+- Commit: `e535e99`
+- Type: Feature/Fix
+- Status: Verified
+
+### Changes
+
+- Updated source version to `0.1.21` and synced release metadata.
+- Updated `electron/main.cjs`.
+
+
+### Verification
+
+```powershell
+pnpm sync:all
+pnpm build
+```
+
+Result: passed.
+
+
 ## 2026-05-05 - Code Update 0.1.20
 
 - Version: `0.1.20`
