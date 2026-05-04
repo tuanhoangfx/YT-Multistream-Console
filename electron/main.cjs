@@ -724,9 +724,20 @@ function configureAutoUpdater() {
     console.log("Update downloaded:", info?.version);
   });
 
-  void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
-    console.error("checkForUpdatesAndNotify failed:", formatUpdaterError(error));
-  });
+  // Avoid checkForUpdatesAndNotify(): internally chains downloadPromise without .catch(),
+  // which can surface as Electron "undefined: undefined" dialogs on failures or flaky Notification APIs.
+  void (async () => {
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      const downloadPromise = result?.downloadPromise;
+      if (downloadPromise == null) return;
+      await downloadPromise.catch((error) =>
+        console.error("Auto-update download failed:", formatUpdaterError(error))
+      );
+    } catch (error) {
+      console.error("Auto-update check failed:", formatUpdaterError(error));
+    }
+  })();
 }
 
 function bindStreamingApi() {
