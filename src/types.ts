@@ -42,6 +42,12 @@ declare global {
       startJob: (payload: Record<string, unknown>) => Promise<{ ok: boolean }>;
       stopJob: (payload: Record<string, unknown>) => Promise<{ ok: boolean; stopped: boolean }>;
       stopAllJobs: () => Promise<{ ok: boolean; count: number }>;
+      getAppInfo: () => Promise<{ name: string; version: string; isPackaged: boolean }>;
+      checkForUpdates: () => Promise<{
+        ok: boolean;
+        message?: string;
+        updateInfo?: { version?: string; releaseDate?: string } | null;
+      }>;
       checkFfmpeg: () => Promise<{ ok: boolean; message: string }>;
       readReleaseLog: () => Promise<{ ok: boolean; entries: ReleaseLogEntry[]; message?: string }>;
       scanDriveFolder: (payload: Record<string, unknown>) => Promise<{ ok: boolean; links: string[]; message: string }>;

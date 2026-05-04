@@ -39,7 +39,7 @@
     "manifestPath": "tool.manifest.json"
   },
   "release": {
-    "version": "0.1.15",
+    "version": "0.1.16",
     "readiness": [
       "build",
       "docs",

@@ -1,4 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs/promises");
 const os = require("node:os");
@@ -671,6 +672,63 @@ function resolveFfmpegBinary() {
 
 const ffmpegBinary = resolveFfmpegBinary();
 
+function formatUpdaterError(error) {
+  if (error == null) return "Unknown update error";
+  if (error instanceof Error) return error.message || error.stack || "Update error";
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && error != null && "message" in error && error.message != null) {
+    return String(error.message);
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function bindAppApi() {
+  ipcMain.handle("app:info", () => ({
+    name: app.getName(),
+    version: app.getVersion(),
+    isPackaged: app.isPackaged
+  }));
+
+  ipcMain.handle("app:checkForUpdates", async () => {
+    if (!app.isPackaged) {
+      return { ok: false, message: "Updates are only available in the packaged app." };
+    }
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      return { ok: true, updateInfo: result?.updateInfo || null };
+    } catch (error) {
+      return { ok: false, message: formatUpdaterError(error) };
+    }
+  });
+}
+
+function configureAutoUpdater() {
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("error", (error) => {
+    console.error("Auto update failed:", formatUpdaterError(error));
+  });
+
+  autoUpdater.on("update-available", (info) => {
+    console.log("Update available:", info?.version);
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    console.log("Update downloaded:", info?.version);
+  });
+
+  void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+    console.error("checkForUpdatesAndNotify failed:", formatUpdaterError(error));
+  });
+}
+
 function bindStreamingApi() {
   ipcMain.handle("stream:pick-local-video", async () => {
     const result = await dialog.showOpenDialog({
@@ -901,7 +959,9 @@ function createWindow() {
 
 app.whenReady().then(() => {
   bindStreamingApi();
+  bindAppApi();
   createWindow();
+  configureAutoUpdater();
 });
 
 app.on("window-all-closed", () => {

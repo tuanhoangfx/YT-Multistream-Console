@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld("streaming", {
   startJob: (payload) => ipcRenderer.invoke("stream:start", payload),
   stopJob: (payload) => ipcRenderer.invoke("stream:stop", payload),
   stopAllJobs: () => ipcRenderer.invoke("stream:stop-all"),
+  getAppInfo: () => ipcRenderer.invoke("app:info"),
+  checkForUpdates: () => ipcRenderer.invoke("app:checkForUpdates"),
   checkFfmpeg: () => ipcRenderer.invoke("stream:check-ffmpeg"),
   readReleaseLog: () => ipcRenderer.invoke("release-log:read"),
   scanDriveFolder: (payload) => ipcRenderer.invoke("drive:scan-folder", payload),
