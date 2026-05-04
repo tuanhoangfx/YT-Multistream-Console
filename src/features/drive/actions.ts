@@ -26,7 +26,8 @@ export function appendDriveLinks(items: DriveLibraryItem[], urls: string[], grou
       addedAt: new Date().toLocaleDateString("en-GB"),
       metadataStatus: "pending" as DriveMetadataStatus,
       metadataMessage: "Waiting for metadata scan.",
-      metadataChecked: false
+      metadataChecked: false,
+      metadataProbeMode: "quick" as const
     }));
   return [...nextItems, ...items].slice(0, DRIVE_LIBRARY_LIMIT);
 }
@@ -51,6 +52,7 @@ export function markDriveMetadataPending(item: DriveLibraryItem) {
     size: hasDriveValue(item.size) ? item.size : "Auto",
     metadataStatus: "pending" as DriveMetadataStatus,
     metadataMessage: "Waiting for metadata scan.",
-    metadataChecked: false
+    metadataChecked: false,
+    metadataProbeMode: "quick" as const
   };
 }

@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction, useEffect } from "react";
-import { hasDriveValue, type DriveLibraryItem, type DriveMetadataStatus } from "./drive-utils";
+import { hasDriveValue, type DriveLibraryItem, type DriveMetadataProbeMode, type DriveMetadataStatus } from "./drive-utils";
 
 type ProbeResult = {
   name?: string;
@@ -7,6 +7,7 @@ type ProbeResult = {
   resolution?: string;
   size?: string;
   message?: string;
+  probeMode?: DriveMetadataProbeMode;
 };
 
 const MAX_PARALLEL_METADATA_SCANS = 3;
@@ -22,23 +23,34 @@ export function useDriveMetadataScanner({
   metadataLoadingIds: string[];
   setMetadataLoadingIds: Dispatch<SetStateAction<string[]>>;
   setDriveLibrary: Dispatch<SetStateAction<DriveLibraryItem[]>>;
-  probeDriveLink: (url: string) => Promise<ProbeResult>;
+  probeDriveLink: (url: string, probeMode?: DriveMetadataProbeMode) => Promise<ProbeResult>;
 }) {
   useEffect(() => {
     const scanSlots = Math.max(0, MAX_PARALLEL_METADATA_SCANS - metadataLoadingIds.length);
     if (scanSlots === 0) return;
 
-    const pendingItems = driveLibrary.filter((entry) => !metadataLoadingIds.includes(entry.id) && entry.metadataStatus === "pending").slice(0, scanSlots);
+    const pendingQuickItems = driveLibrary.filter((entry) => !metadataLoadingIds.includes(entry.id) && entry.metadataStatus === "pending" && entry.metadataProbeMode !== "deep");
+    const pendingDeepItems = driveLibrary.filter((entry) => !metadataLoadingIds.includes(entry.id) && entry.metadataStatus === "pending" && entry.metadataProbeMode === "deep");
+    const pendingItems = (pendingQuickItems.length > 0 ? pendingQuickItems : pendingDeepItems).slice(0, scanSlots);
     if (pendingItems.length === 0) return;
 
     const pendingIds = pendingItems.map((item) => item.id);
     setMetadataLoadingIds((ids) => Array.from(new Set([...ids, ...pendingIds])));
     setDriveLibrary((items) =>
-      items.map((entry) => (pendingIds.includes(entry.id) ? { ...entry, metadataStatus: "scanning", metadataMessage: "Reading Google Drive metadata..." } : entry))
+      items.map((entry) =>
+        pendingIds.includes(entry.id)
+          ? {
+              ...entry,
+              metadataStatus: "scanning",
+              metadataMessage: entry.metadataProbeMode === "deep" ? "Reading long video metadata..." : "Reading Google Drive metadata..."
+            }
+          : entry
+      )
     );
 
     pendingItems.forEach((item) => {
-      probeDriveLink(item.url)
+      const probeMode = item.metadataProbeMode === "deep" ? "deep" : "quick";
+      probeDriveLink(item.url, probeMode)
         .then((metadata) => {
           const duration = metadata.duration || item.duration;
           const resolution = metadata.resolution || item.resolution;
@@ -47,6 +59,27 @@ export function useDriveMetadataScanner({
           const hasResolution = hasDriveValue(resolution);
           const hasSize = hasDriveValue(size);
           const hasName = Boolean(metadata.name && metadata.name !== "Drive video");
+          const shouldDeferDeepProbe = probeMode === "quick" && !(hasDuration && hasResolution);
+          if (shouldDeferDeepProbe) {
+            setDriveLibrary((items) =>
+              items.map((entry) =>
+                entry.id === item.id
+                  ? {
+                      ...entry,
+                      name: metadata.name || entry.name,
+                      duration: duration === "Auto" ? "-" : duration,
+                      resolution: resolution === "Auto" ? "-" : resolution,
+                      size: size === "Auto" ? "-" : size,
+                      metadataStatus: "pending",
+                      metadataMessage: "Queued for long video metadata scan after shorter videos.",
+                      metadataChecked: false,
+                      metadataProbeMode: "deep"
+                    }
+                  : entry
+              )
+            );
+            return;
+          }
           const metadataStatus: DriveMetadataStatus = hasDuration && hasResolution ? "ready" : hasName || hasDuration || hasResolution || hasSize ? "partial" : "error";
 
           setDriveLibrary((items) =>
@@ -60,13 +93,30 @@ export function useDriveMetadataScanner({
                     size: size === "Auto" ? "-" : size,
                     metadataStatus,
                     metadataMessage: metadata.message || (metadataStatus === "ready" ? "Metadata generated." : "Only partial metadata was available."),
-                    metadataChecked: true
+                    metadataChecked: true,
+                    metadataProbeMode: probeMode
                   }
                 : entry
             )
           );
         })
         .catch(() => {
+          if (probeMode === "quick") {
+            setDriveLibrary((items) =>
+              items.map((entry) =>
+                entry.id === item.id
+                  ? {
+                      ...entry,
+                      metadataStatus: "pending",
+                      metadataMessage: "Queued for long video metadata scan after shorter videos.",
+                      metadataChecked: false,
+                      metadataProbeMode: "deep"
+                    }
+                  : entry
+              )
+            );
+            return;
+          }
           setDriveLibrary((items) =>
             items.map((entry) =>
               entry.id === item.id
@@ -74,7 +124,8 @@ export function useDriveMetadataScanner({
                     ...entry,
                     metadataStatus: "error",
                     metadataMessage: "Unable to read metadata. Keep link if stream can still start.",
-                    metadataChecked: true
+                    metadataChecked: true,
+                    metadataProbeMode: probeMode
                   }
                 : entry
             )

@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("streaming", {
   stopAllJobs: () => ipcRenderer.invoke("stream:stop-all"),
   getAppInfo: () => ipcRenderer.invoke("app:info"),
   checkForUpdates: () => ipcRenderer.invoke("app:checkForUpdates"),
+  installUpdate: () => ipcRenderer.invoke("app:installUpdate"),
   checkFfmpeg: () => ipcRenderer.invoke("stream:check-ffmpeg"),
   readReleaseLog: () => ipcRenderer.invoke("release-log:read"),
   scanDriveFolder: (payload) => ipcRenderer.invoke("drive:scan-folder", payload),
@@ -15,5 +16,10 @@ contextBridge.exposeInMainWorld("streaming", {
     const listener = (_event, data) => handler(data);
     ipcRenderer.on("stream:job-event", listener);
     return () => ipcRenderer.removeListener("stream:job-event", listener);
+  },
+  onUpdateEvent: (handler) => {
+    const listener = (_event, data) => handler(data);
+    ipcRenderer.on("app:update-event", listener);
+    return () => ipcRenderer.removeListener("app:update-event", listener);
   }
 });

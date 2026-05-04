@@ -6,6 +6,7 @@ export function startStreamJob(job: StreamJob) {
     channelName: job.channelName,
     sourceType: job.sourceType,
     localPath: job.localPath,
+    localPaths: job.localPaths,
     driveUrl: job.driveUrl,
     driveUrls: job.driveUrls,
     drivePlayMode: job.drivePlayMode,
@@ -33,6 +34,14 @@ export function readReleaseLog(): Promise<{ ok: boolean; entries: ReleaseLogEntr
   return window.streaming.readReleaseLog();
 }
 
+export function checkForAppUpdates() {
+  return window.streaming.checkForUpdates();
+}
+
+export function installAppUpdate() {
+  return window.streaming.installUpdate();
+}
+
 export function pickLocalVideo() {
   return window.streaming.pickLocalVideo();
 }
@@ -41,6 +50,6 @@ export function scanDriveFolder(folderUrl: string) {
   return window.streaming.scanDriveFolder({ folderUrl });
 }
 
-export function probeDriveLink(url: string) {
-  return window.streaming.probeDriveLink({ url });
+export function probeDriveLink(url: string, probeMode: "quick" | "deep" = "quick") {
+  return window.streaming.probeDriveLink({ url, probeMode });
 }

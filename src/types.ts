@@ -6,6 +6,7 @@ export type StreamJob = {
   channelName: string;
   sourceType: SourceType;
   localPath: string;
+  localPaths: string[];
   driveUrl: string;
   driveUrls: string[];
   drivePlayMode: "sequential" | "random";
@@ -37,10 +38,16 @@ export type ReleaseLogEntry = {
   items: string[];
 };
 
+export type UpdateEvent = {
+  status: "checking" | "available" | "downloaded" | "none" | "error";
+  version?: string;
+  message?: string;
+};
+
 declare global {
   interface Window {
     streaming: {
-      pickLocalVideo: () => Promise<string>;
+      pickLocalVideo: () => Promise<string[]>;
       startJob: (payload: Record<string, unknown>) => Promise<{ ok: boolean }>;
       stopJob: (payload: Record<string, unknown>) => Promise<{ ok: boolean; stopped: boolean }>;
       stopAllJobs: () => Promise<{ ok: boolean; count: number }>;
@@ -48,13 +55,16 @@ declare global {
       checkForUpdates: () => Promise<{
         ok: boolean;
         message?: string;
+        downloaded?: boolean;
         updateInfo?: { version?: string; releaseDate?: string } | null;
       }>;
+      installUpdate: () => Promise<{ ok: boolean; message?: string }>;
       checkFfmpeg: () => Promise<{ ok: boolean; message: string }>;
       readReleaseLog: () => Promise<{ ok: boolean; entries: ReleaseLogEntry[]; message?: string }>;
       scanDriveFolder: (payload: Record<string, unknown>) => Promise<{ ok: boolean; links: string[]; message: string }>;
-      probeDriveLink: (payload: Record<string, unknown>) => Promise<{ ok: boolean; name: string; duration: string; resolution: string; size: string; message: string }>;
+      probeDriveLink: (payload: Record<string, unknown>) => Promise<{ ok: boolean; name: string; duration: string; resolution: string; size: string; message: string; probeMode?: "quick" | "deep" }>;
       onJobEvent: (handler: (event: StreamEvent) => void) => () => void;
+      onUpdateEvent: (handler: (event: UpdateEvent) => void) => () => void;
     };
   }
 }

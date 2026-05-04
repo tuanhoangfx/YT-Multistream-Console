@@ -2,6 +2,62 @@
 
 Release and distribution process for `YT Multistream Console`.
 
+## 2026-05-05 - Code Update 0.1.25
+
+- Version: `0.1.25`
+- Timestamp: 2026-05-05 02:07 (UTC+7)
+- Commit: `3a0edb6`
+- Type: Feature/Fix
+- Status: Verified
+
+### Changes
+
+- Updated source version to `0.1.25` and synced release metadata.
+- Updated `electron/main.cjs`.
+- Updated `electron/preload.cjs`.
+- Updated `src/App.tsx`.
+- Updated `src/api.ts`.
+- Updated `src/features/app/storage.test.ts`.
+- Additional updated files: +6.
+
+### Verification
+
+```powershell
+pnpm sync:all
+pnpm build
+```
+
+Result: passed.
+
+
+## 2026-05-05 - Code Update 0.1.24
+
+- Version: `0.1.24`
+- Timestamp: 2026-05-05 02:05 (UTC+7)
+- Commit: `3a0edb6`
+- Type: Feature/Fix
+- Status: Verified
+
+### Changes
+
+- Updated source version to `0.1.24` and synced release metadata.
+- Updated `electron/main.cjs`.
+- Updated `electron/preload.cjs`.
+- Updated `src/App.tsx`.
+- Updated `src/api.ts`.
+- Updated `src/features/app/storage.test.ts`.
+- Additional updated files: +6.
+
+### Verification
+
+```powershell
+pnpm sync:all
+pnpm build
+```
+
+Result: passed.
+
+
 ## 2026-05-05 - Code Update 0.1.23
 
 - Version: `0.1.23`

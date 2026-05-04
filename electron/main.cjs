@@ -28,8 +28,12 @@ process.on("unhandledRejection", (reason) => {
 const jobs = new Map();
 let mainWindow = null;
 let cachedAutoUpdater;
-const DRIVE_FETCH_TIMEOUT_MS = 15000;
-const FFMPEG_METADATA_PROBE_TIMEOUT_MS = 15000;
+const DRIVE_FETCH_TIMEOUT_MS = 30000;
+const FFMPEG_METADATA_QUICK_PROBE_TIMEOUT_MS = 15000;
+const FFMPEG_METADATA_DEEP_PROBE_TIMEOUT_MS = 120000;
+const FFMPEG_METADATA_QUICK_RW_TIMEOUT_US = "20000000";
+const FFMPEG_METADATA_DEEP_RW_TIMEOUT_US = "120000000";
+const FFMPEG_METADATA_EARLY_FINISH_MS = 1200;
 
 function getAutoUpdater() {
   if (!app.isPackaged) return null;
@@ -93,6 +97,19 @@ function uniqueDriveUrls(urls) {
     .filter((url) => {
       const key = driveFileKey(url);
       if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function uniqueLocalPaths(paths) {
+  const seen = new Set();
+  return paths
+    .map((filePath) => String(filePath || "").trim())
+    .filter(Boolean)
+    .filter((filePath) => {
+      const key = filePath.toLowerCase();
+      if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
@@ -436,12 +453,13 @@ async function getDriveFileName(rawUrl) {
 
 function formatDuration(rawValue) {
   const value = String(rawValue || "");
-  const match = value.match(/^(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?$/);
+  const match = value.match(/^(\d+):(\d{2}):(\d{2})(?:\.\d+)?$/);
   if (!match) return "";
-  return `${match[1]}:${match[2]}:${match[3]}`;
+  const hours = match[1].padStart(2, "0");
+  return `${hours}:${match[2]}:${match[3]}`;
 }
 
-async function probeMediaMetadata(rawUrl) {
+async function probeMediaMetadata(rawUrl, probeMode = "quick") {
   let resolved;
   try {
     resolved = await resolveDriveDownload(rawUrl);
@@ -451,7 +469,7 @@ async function probeMediaMetadata(rawUrl) {
   const candidates = Array.from(new Set([resolved.url, resolved.initialUrl, normalizeDriveUrl(rawUrl)].filter(Boolean)));
   let lastProbe = { duration: "", resolution: "", stderrTail: "" };
   for (const input of candidates) {
-    const result = await runFfmpegMetadataProbe(input, resolved.cookie);
+    const result = await runFfmpegMetadataProbe(input, resolved.cookie, probeMode);
     lastProbe = result;
     if (result.duration || result.resolution) {
       return {
@@ -472,35 +490,57 @@ async function probeMediaMetadata(rawUrl) {
   };
 }
 
-function runFfmpegMetadataProbe(input, cookie) {
+function runFfmpegMetadataProbe(input, cookie, probeMode = "quick") {
   return new Promise((resolve) => {
     const requestHeaders = [`User-Agent: Mozilla/5.0 YT-Multistream-Console`];
     if (cookie) requestHeaders.push(`Cookie: ${cookie}`);
-    const child = spawn(ffmpegBinary, ["-hide_banner", "-rw_timeout", "20000000", "-headers", `${requestHeaders.join("\r\n")}\r\n`, "-i", input], { windowsHide: true });
+    const timeoutMs = probeMode === "deep" ? FFMPEG_METADATA_DEEP_PROBE_TIMEOUT_MS : FFMPEG_METADATA_QUICK_PROBE_TIMEOUT_MS;
+    const rwTimeoutUs = probeMode === "deep" ? FFMPEG_METADATA_DEEP_RW_TIMEOUT_US : FFMPEG_METADATA_QUICK_RW_TIMEOUT_US;
+    const child = spawn(
+      ffmpegBinary,
+      ["-hide_banner", "-rw_timeout", rwTimeoutUs, "-headers", `${requestHeaders.join("\r\n")}\r\n`, "-i", input],
+      { windowsHide: true }
+    );
     let stderr = "";
     let settled = false;
+    let earlyFinishTimeout = null;
+    const readMetadata = () => {
+      const duration = formatDuration(stderr.match(/Duration:\s*([0-9:.]+)/i)?.[1] || "");
+      const resolutionMatch = stderr.match(/Video:.*?(\d{2,5})x(\d{2,5})/is) || stderr.match(/(\d{2,5})x(\d{2,5})/);
+      return {
+        duration,
+        resolution: resolutionMatch ? `${resolutionMatch[1]}x${resolutionMatch[2]}` : "",
+        stderrTail: stderr.slice(-900)
+      };
+    };
     const finish = () => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      const duration = formatDuration(stderr.match(/Duration:\s*([0-9:.]+)/i)?.[1] || "");
-      const resolutionMatch = stderr.match(/Video:.*?(\d{2,5})x(\d{2,5})/is) || stderr.match(/(\d{2,5})x(\d{2,5})/);
-      resolve({
-        duration,
-        resolution: resolutionMatch ? `${resolutionMatch[1]}x${resolutionMatch[2]}` : "",
-        stderrTail: stderr.slice(-900)
-      });
+      if (earlyFinishTimeout) clearTimeout(earlyFinishTimeout);
+      resolve(readMetadata());
     };
-    const timeout = setTimeout(() => {
+    const finishAndKill = () => {
       try {
         child.kill("SIGTERM");
       } catch {
-        // Ignore probe timeout race.
+        // Ignore probe termination races.
       }
       finish();
-    }, FFMPEG_METADATA_PROBE_TIMEOUT_MS);
+    };
+    const timeout = setTimeout(() => {
+      finishAndKill();
+    }, timeoutMs);
     child.stderr.on("data", (buffer) => {
       stderr += String(buffer || "");
+      const metadata = readMetadata();
+      if (metadata.duration && metadata.resolution) {
+        finishAndKill();
+        return;
+      }
+      if ((metadata.duration || metadata.resolution) && !earlyFinishTimeout) {
+        earlyFinishTimeout = setTimeout(finishAndKill, FFMPEG_METADATA_EARLY_FINISH_MS);
+      }
     });
     child.on("error", finish);
     child.on("close", finish);
@@ -564,6 +604,11 @@ function broadcast(event) {
   mainWindow.webContents.send("stream:job-event", event);
 }
 
+function broadcastUpdateEvent(event) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("app:update-event", event);
+}
+
 function buildRtmpUrl(rtmpBase, streamKey) {
   const base = String(rtmpBase || "").trim().replace(/\/+$/, "");
   const key = String(streamKey || "").trim().replace(/^\/+/, "");
@@ -610,6 +655,21 @@ async function createDrivePlaylistInput(urls, playMode) {
     },
     cleanupPaths: [listPath],
     count: normalizedUrls.length
+  };
+}
+
+async function createLocalPlaylistInput(paths, playMode) {
+  const sourcePaths = paths.map((filePath) => path.resolve(filePath).replace(/\\/g, "/")).filter(Boolean);
+  const normalizedPaths = playMode === "random" ? shuffleItems(sourcePaths) : sourcePaths;
+  const listBody = ["ffconcat version 1.0", ...normalizedPaths.map((filePath) => `file '${escapeConcatPath(filePath)}'`)].join(os.EOL);
+  const listPath = path.join(os.tmpdir(), `yt-multistream-local-${Date.now()}-${Math.random().toString(36).slice(2)}.ffconcat`);
+  await fs.writeFile(listPath, listBody, "utf8");
+  return {
+    input: {
+      kind: "concat",
+      path: listPath
+    },
+    cleanupPaths: [listPath]
   };
 }
 
@@ -775,8 +835,38 @@ function bindAppApi() {
     }
     initAutoUpdaterHooks();
     try {
+      broadcastUpdateEvent({ status: "checking", message: "Checking for updates..." });
       const result = await updater.checkForUpdates();
-      return { ok: true, updateInfo: result?.updateInfo || null };
+      if (!result?.updateInfo) {
+        broadcastUpdateEvent({ status: "none", message: "No updates available." });
+        return { ok: true, updateInfo: null, message: "No updates available." };
+      }
+      const version = result.updateInfo?.version ? String(result.updateInfo.version) : "";
+      if (result.downloadPromise) {
+        await result.downloadPromise;
+        return { ok: true, updateInfo: result.updateInfo, downloaded: true, message: version ? `Update ${version} downloaded.` : "Update downloaded." };
+      }
+      return { ok: true, updateInfo: result.updateInfo, downloaded: false, message: version ? `Update ${version} is available.` : "Update is available." };
+    } catch (error) {
+      const message = formatUpdaterError(error);
+      broadcastUpdateEvent({ status: "error", message });
+      return { ok: false, message };
+    }
+  });
+
+  ipcMain.handle("app:installUpdate", async () => {
+    if (!app.isPackaged) {
+      return { ok: false, message: "Updates are only available in the packaged app." };
+    }
+    const updater = getAutoUpdater();
+    if (!updater) {
+      return { ok: false, message: "Updater is unavailable in this build." };
+    }
+    try {
+      setImmediate(() => {
+        updater.quitAndInstall(false, true);
+      });
+      return { ok: true, message: "Installing update..." };
     } catch (error) {
       return { ok: false, message: formatUpdaterError(error) };
     }
@@ -797,7 +887,9 @@ function initAutoUpdaterHooks() {
 
   updater.on("error", (error) => {
     try {
-      console.error("Auto update failed:", formatUpdaterError(error));
+      const message = formatUpdaterError(error);
+      console.error("Auto update failed:", message);
+      broadcastUpdateEvent({ status: "error", message });
     } catch {
       // Never let listener throw (could surface as a blank Electron error dialog).
     }
@@ -805,10 +897,12 @@ function initAutoUpdaterHooks() {
 
   updater.on("update-available", (info) => {
     console.log("Update available:", info?.version);
+    broadcastUpdateEvent({ status: "available", version: info?.version, message: info?.version ? `Update ${info.version} is available.` : "Update is available." });
   });
 
   updater.on("update-downloaded", (info) => {
     console.log("Update downloaded:", info?.version);
+    broadcastUpdateEvent({ status: "downloaded", version: info?.version, message: info?.version ? `Update ${info.version} is ready to install.` : "Update is ready to install." });
   });
 }
 
@@ -840,11 +934,11 @@ function scheduleDeferredAutoUpdateCheck() {
 function bindStreamingApi() {
   ipcMain.handle("stream:pick-local-video", async () => {
     const result = await dialog.showOpenDialog({
-      properties: ["openFile"],
+      properties: ["openFile", "multiSelections"],
       filters: [{ name: "Video", extensions: ["mp4", "mkv", "mov", "webm", "avi"] }]
     });
-    if (result.canceled || result.filePaths.length === 0) return "";
-    return result.filePaths[0];
+    if (result.canceled || result.filePaths.length === 0) return [];
+    return result.filePaths;
   });
 
   ipcMain.handle("stream:check-ffmpeg", async () => {
@@ -870,21 +964,27 @@ function bindStreamingApi() {
     const channelName = String(payload.channelName || "Unknown channel");
     const sourceType = payload.sourceType === "drive" ? "drive" : "local";
     const localPath = String(payload.localPath || "").trim();
+    const localPaths = uniqueLocalPaths([...(Array.isArray(payload.localPaths) ? payload.localPaths : []), localPath]);
     const driveUrl = String(payload.driveUrl || "").trim();
     const driveUrls = uniqueDriveUrls([...(Array.isArray(payload.driveUrls) ? payload.driveUrls : []), driveUrl]);
     const drivePlayMode = payload.drivePlayMode === "random" ? "random" : "sequential";
     const outputs = buildOutputTargets(payload);
 
     if (!jobId) throw new Error("Missing job id.");
-    if (sourceType === "local" && !localPath) throw new Error("Missing local video path.");
+    if (sourceType === "local" && localPaths.length === 0) throw new Error("Missing local video path.");
     if (sourceType === "drive" && driveUrls.length === 0) throw new Error("Missing Google Drive URL.");
 
     if (jobs.has(jobId)) {
       stopJobInternal(jobId, "Restarting stream with new config");
     }
 
-    const playlist = sourceType === "drive" && driveUrls.length > 1 ? await createDrivePlaylistInput(driveUrls, drivePlayMode) : null;
-    const input = playlist?.input || (sourceType === "drive" ? normalizeDriveUrl(driveUrls[0]) : localPath);
+    const playlist =
+      sourceType === "drive" && driveUrls.length > 1
+        ? await createDrivePlaylistInput(driveUrls, drivePlayMode)
+        : sourceType === "local" && localPaths.length > 1
+          ? await createLocalPlaylistInput(localPaths, drivePlayMode)
+          : null;
+    const input = playlist?.input || (sourceType === "drive" ? normalizeDriveUrl(driveUrls[0]) : localPaths[0]);
     const args = createFfmpegArgs(input, outputs);
     const child = spawn(ffmpegBinary, args, { windowsHide: true });
 
@@ -915,7 +1015,12 @@ function bindStreamingApi() {
 
     jobs.set(jobId, { process: child, startedAt: Date.now(), channelName, cleanupPaths: playlist?.cleanupPaths || [] });
       const outputLabel = outputs.length > 1 ? `${outputs.length} outputs` : "primary output";
-      const inputLabel = sourceType === "drive" && driveUrls.length > 1 ? `${driveUrls.length} Drive videos, ${drivePlayMode === "random" ? "shuffle loop" : "loop all"} mode` : "single source";
+      const inputLabel =
+        sourceType === "drive" && driveUrls.length > 1
+          ? `${driveUrls.length} Drive videos, ${drivePlayMode === "random" ? "shuffle loop" : "loop all"} mode`
+          : sourceType === "local" && localPaths.length > 1
+            ? `${localPaths.length} local videos, ${drivePlayMode === "random" ? "shuffle loop" : "loop all"} mode`
+            : "single source";
       broadcast({ jobId, level: "success", message: `Streaming started for ${channelName} (${outputLabel}, ${inputLabel})`, status: "running" });
     return { ok: true };
   });
@@ -988,8 +1093,9 @@ function bindStreamingApi() {
 
   ipcMain.handle("drive:probe-link", async (_event, payload = {}) => {
     const url = String(payload.url || "").trim();
+    const probeMode = payload.probeMode === "deep" ? "deep" : "quick";
     if (!url) throw new Error("Missing Drive URL.");
-    const [name, media] = await Promise.all([getDriveFileName(url), probeMediaMetadata(url)]);
+    const [name, media] = await Promise.all([getDriveFileName(url), probeMediaMetadata(url, probeMode)]);
     const duration = media.duration || "-";
     const resolution = media.resolution || "-";
     const size = media.size || "-";
@@ -1002,8 +1108,9 @@ function bindStreamingApi() {
       duration,
       resolution,
       size,
+      probeMode,
       message: hasMetadata
-        ? "Metadata generated."
+        ? probeMode === "deep" ? "Long video metadata generated." : "Metadata generated."
         : hasPartialMetadata
           ? `Partial metadata only. ffmpeg output: ${(media.debug || "").replace(/\s+/g, " ").slice(0, 220) || "no media stream details"}`
           : `Could not read media metadata. ffmpeg output: ${(media.debug || "").replace(/\s+/g, " ").slice(0, 220) || "empty"}`

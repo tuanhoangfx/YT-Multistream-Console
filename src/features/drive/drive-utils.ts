@@ -1,6 +1,7 @@
 import type { StreamJob } from "../../types";
 
 export type DriveMetadataStatus = "pending" | "scanning" | "ready" | "partial" | "error";
+export type DriveMetadataProbeMode = "quick" | "deep";
 
 export type DriveLibraryItem = {
   id: string;
@@ -14,6 +15,7 @@ export type DriveLibraryItem = {
   metadataStatus: DriveMetadataStatus;
   metadataMessage?: string;
   metadataChecked?: boolean;
+  metadataProbeMode?: DriveMetadataProbeMode;
 };
 
 /** File-style Drive URLs only (/file/d/… or open/uc-style ?id=). Excludes folder views and non-Drive origins. */

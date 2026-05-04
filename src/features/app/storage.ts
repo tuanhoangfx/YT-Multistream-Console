@@ -6,6 +6,7 @@ import {
   type DriveLibraryItem,
   type DriveMetadataStatus
 } from "../drive/drive-utils";
+import { getJobLocalPaths } from "../streams/actions";
 import { now } from "../../utils/time";
 
 const THEME_KEY = "yt-multistream-theme";
@@ -24,6 +25,7 @@ function defaultJobs(): StreamJob[] {
       channelName: "Channel A",
       sourceType: "local",
       localPath: "",
+      localPaths: [],
       driveUrl: "",
       driveUrls: [],
       drivePlayMode: "sequential",
@@ -51,27 +53,31 @@ export function readJobs(): StreamJob[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(JOBS_KEY) || "[]") as StreamJob[];
     if (!Array.isArray(parsed) || parsed.length === 0) return defaultJobs();
-    return parsed.map((item, index) => ({
-      id: item.id || crypto.randomUUID(),
-      channelName: item.channelName || `Channel ${index + 1}`,
-      sourceType: item.sourceType === "drive" ? "drive" : "local",
-      localPath: item.localPath || "",
-      driveUrl: item.driveUrl || "",
-      driveUrls: getJobDriveUrls(item),
-      drivePlayMode: item.drivePlayMode === "random" ? "random" : "sequential",
-      driveLastIndex: Number.isFinite(item.driveLastIndex) ? item.driveLastIndex : 0,
-      rtmpBase: item.rtmpBase || "rtmp://a.rtmp.youtube.com/live2",
-      primaryRtmpUrl: item.primaryRtmpUrl || "",
-      backupRtmpUrl: item.backupRtmpUrl || "rtmp://b.rtmp.youtube.com/live2?backup=1",
-      streamKey: item.streamKey || "",
-      status: item.status === "scheduled" || item.status === "running" || item.status === "failed" || item.status === "idle" ? item.status : "idle",
-      publishMode: item.publishMode === "scheduled" ? "scheduled" : "immediate",
-      scheduledAt: item.scheduledAt || "",
-      liveStartedAt: Number.isFinite(item.liveStartedAt) && item.status === "running" ? item.liveStartedAt : 0,
-      liveElapsedMs: Number.isFinite(item.liveElapsedMs) ? Math.max(0, item.liveElapsedMs || 0) : 0,
-      lastMessage: item.lastMessage || "Ready",
-      updatedAt: item.updatedAt || now()
-    }));
+    return parsed.map((item, index) => {
+      const localPaths = getJobLocalPaths(item);
+      return {
+        id: item.id || crypto.randomUUID(),
+        channelName: item.channelName || `Channel ${index + 1}`,
+        sourceType: item.sourceType === "drive" ? "drive" : "local",
+        localPath: localPaths[0] || "",
+        localPaths,
+        driveUrl: item.driveUrl || "",
+        driveUrls: getJobDriveUrls(item),
+        drivePlayMode: item.drivePlayMode === "random" ? "random" : "sequential",
+        driveLastIndex: Number.isFinite(item.driveLastIndex) ? item.driveLastIndex : 0,
+        rtmpBase: item.rtmpBase || "rtmp://a.rtmp.youtube.com/live2",
+        primaryRtmpUrl: item.primaryRtmpUrl || "",
+        backupRtmpUrl: item.backupRtmpUrl || "rtmp://b.rtmp.youtube.com/live2?backup=1",
+        streamKey: item.streamKey || "",
+        status: item.status === "scheduled" || item.status === "running" || item.status === "failed" || item.status === "idle" ? item.status : "idle",
+        publishMode: item.publishMode === "scheduled" ? "scheduled" : "immediate",
+        scheduledAt: item.scheduledAt || "",
+        liveStartedAt: Number.isFinite(item.liveStartedAt) && item.status === "running" ? item.liveStartedAt : 0,
+        liveElapsedMs: Number.isFinite(item.liveElapsedMs) ? Math.max(0, item.liveElapsedMs || 0) : 0,
+        lastMessage: item.lastMessage || "Ready",
+        updatedAt: item.updatedAt || now()
+      };
+    });
   } catch {
     return defaultJobs();
   }
@@ -90,7 +96,8 @@ export function readDriveLibrary(): DriveLibraryItem[] {
       addedAt: new Date().toLocaleDateString("en-GB"),
       metadataStatus: "pending" as DriveMetadataStatus,
       metadataMessage: "Waiting for metadata scan.",
-      metadataChecked: false
+      metadataChecked: false,
+      metadataProbeMode: "quick" as const
     }));
 
   try {
@@ -112,7 +119,8 @@ export function readDriveLibrary(): DriveLibraryItem[] {
             addedAt: new Date().toLocaleDateString("en-GB"),
             metadataStatus: "pending",
             metadataMessage: "Waiting for metadata scan.",
-            metadataChecked: false
+            metadataChecked: false,
+            metadataProbeMode: "quick" as const
           };
         }
         const url = String(item.url || "").trim();
@@ -134,7 +142,8 @@ export function readDriveLibrary(): DriveLibraryItem[] {
           addedAt: String(item.addedAt || new Date().toLocaleDateString("en-GB")),
           metadataStatus: deriveMetadataStatus(normalizedItem),
           metadataMessage: String(item.metadataMessage || ""),
-          metadataChecked: Boolean(item.metadataChecked)
+          metadataChecked: Boolean(item.metadataChecked),
+          metadataProbeMode: item.metadataProbeMode === "deep" ? "deep" : "quick"
         };
       })
       .filter(Boolean) as DriveLibraryItem[];

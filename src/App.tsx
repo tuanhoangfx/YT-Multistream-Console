@@ -34,8 +34,8 @@ import {
   Zap
 } from "lucide-react";
 import { type MouseEvent, useEffect, useMemo, useState } from "react";
-import { checkFfmpegStatus, pickLocalVideo, probeDriveLink, readReleaseLog, scanDriveFolder, startStreamJob, stopAllStreams, stopStreamJob } from "./api";
-import type { ReleaseLogEntry, StreamEvent, StreamJob } from "./types";
+import { checkFfmpegStatus, checkForAppUpdates, installAppUpdate, pickLocalVideo, probeDriveLink, readReleaseLog, scanDriveFolder, startStreamJob, stopAllStreams, stopStreamJob } from "./api";
+import type { ReleaseLogEntry, StreamEvent, StreamJob, UpdateEvent } from "./types";
 import releaseLogMarkdown from "../RELEASE.md?raw";
 import {
   driveFileKey,
@@ -49,7 +49,7 @@ import {
 import { appendDriveLinks, applyGroupToDriveLinks, markDriveMetadataPending, removeDriveLinkById, removeSelectedDriveLinks } from "./features/drive/actions";
 import { persistDriveLibrary, persistJobs, persistTheme, readDriveLibrary, readJobs, readTheme } from "./features/app/storage";
 import { findDueScheduledJob } from "./features/streams/scheduler";
-import { buildCancelledScheduleUpdate, buildScheduledUpdate, buildStoppedUpdate, validateStartJob } from "./features/streams/actions";
+import { buildCancelledScheduleUpdate, buildScheduledUpdate, buildStoppedUpdate, getJobLocalPaths, validateStartJob } from "./features/streams/actions";
 import { filterConfigDriveRows, filterLibraryRows, filterQueueRows } from "./features/streams/selectors";
 import { toneFromSeed } from "./features/streams/dropdown-utils";
 import { useDriveMetadataScanner } from "./features/drive/useDriveMetadataScanner";
@@ -212,6 +212,9 @@ export function App() {
   const [showToolGuide, setShowToolGuide] = useState(false);
   const [showVersionLog, setShowVersionLog] = useState(false);
   const [versionLogEntries, setVersionLogEntries] = useState<ReleaseLogEntry[]>(() => VERSION_LOG_FALLBACK);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState("");
   const [lastDrivePickIndex, setLastDrivePickIndex] = useState<number | null>(null);
   const [libraryDragging, setLibraryDragging] = useState(false);
   const [libraryDragAnchorIndex, setLibraryDragAnchorIndex] = useState<number | null>(null);
@@ -265,7 +268,8 @@ export function App() {
   );
   const metadataReadyCount = driveLibrary.filter((item) => item.metadataStatus === "ready" || item.metadataStatus === "partial").length;
   const selectedLibraryCount = selectedDriveIds.size;
-  const selectedSourceCount = selectedJob ? (selectedJob.sourceType === "drive" ? selectedJobDriveUrls.length : selectedJob.localPath.trim() ? 1 : 0) : 0;
+  const selectedJobLocalPaths = useMemo(() => getJobLocalPaths(selectedJob), [selectedJob]);
+  const selectedSourceCount = selectedJob ? (selectedJob.sourceType === "drive" ? selectedJobDriveUrls.length : selectedJobLocalPaths.length) : 0;
   const selectedSourceLabel = `${selectedSourceCount} video${selectedSourceCount === 1 ? "" : "s"} selected`;
 
   useEffect(() => {
@@ -426,6 +430,39 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const unsubscribe = window.streaming.onUpdateEvent((event: UpdateEvent) => {
+      if (event.status === "checking") {
+        setUpdateBusy(true);
+        setUpdateMessage(event.message || "Checking for updates...");
+        return;
+      }
+      if (event.status === "downloaded") {
+        setUpdateBusy(false);
+        setUpdateReady(true);
+        setUpdateMessage(event.message || "Update is ready to install.");
+        addLog("success", event.message || "Update is ready to install.");
+        return;
+      }
+      if (event.status === "available") {
+        setUpdateMessage(event.message || "Update is available.");
+        return;
+      }
+      if (event.status === "none") {
+        setUpdateBusy(false);
+        setUpdateReady(false);
+        setUpdateMessage(event.message || "No updates available.");
+        return;
+      }
+      if (event.status === "error") {
+        setUpdateBusy(false);
+        setUpdateMessage(event.message || "Update check failed.");
+        addLog("error", event.message || "Update check failed.");
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
     if (busy || ffmpegStatus !== "ok") return;
     const timer = window.setInterval(() => {
       const dueJob = findDueScheduledJob(jobs);
@@ -472,6 +509,7 @@ export function App() {
       channelName: `Channel ${jobs.length + 1}`,
       sourceType: "local",
       localPath: "",
+      localPaths: [],
       driveUrl: "",
       driveUrls: [],
       drivePlayMode: "sequential",
@@ -517,8 +555,12 @@ export function App() {
   }
 
   async function pickSourceFile() {
-    const filePath = await pickLocalVideo();
-    if (filePath) updateSelectedJob({ localPath: filePath, sourceType: "local" });
+    const selectedPaths = await pickLocalVideo();
+    const localPaths = getJobLocalPaths({
+      localPath: Array.isArray(selectedPaths) ? selectedPaths[0] || "" : String(selectedPaths || ""),
+      localPaths: Array.isArray(selectedPaths) ? selectedPaths : []
+    });
+    if (localPaths.length > 0) updateSelectedJob({ localPath: localPaths[0], localPaths, sourceType: "local" });
   }
 
   async function startOne(job: StreamJob) {
@@ -582,6 +624,56 @@ export function App() {
       const message = refreshError instanceof Error ? refreshError.message : "Unable to refresh diagnostics.";
       setFfmpegStatus("missing");
       setError(message);
+      addLog("error", message);
+    }
+  }
+
+  async function checkUpdatesNow() {
+    setUpdateBusy(true);
+    setUpdateMessage("Checking for updates...");
+    try {
+      const result = await checkForAppUpdates();
+      setUpdateBusy(false);
+      if (!result.ok) {
+        const message = result.message || "Update check failed.";
+        setUpdateMessage(message);
+        addLog("error", message);
+        return;
+      }
+      if (result.downloaded) {
+        const message = result.message || "Update is ready to install.";
+        setUpdateReady(true);
+        setUpdateMessage(message);
+        addLog("success", message);
+        return;
+      }
+      const message = result.message || (result.updateInfo?.version ? `Update ${result.updateInfo.version} is available.` : "No updates available.");
+      setUpdateReady(false);
+      setUpdateMessage(message);
+      addLog("info", message);
+    } catch (updateError) {
+      const message = updateError instanceof Error ? updateError.message : "Update check failed.";
+      setUpdateBusy(false);
+      setUpdateMessage(message);
+      addLog("error", message);
+    }
+  }
+
+  async function installReadyUpdate() {
+    setUpdateBusy(true);
+    setUpdateMessage("Installing update...");
+    try {
+      const result = await installAppUpdate();
+      if (!result.ok) {
+        const message = result.message || "Unable to install update.";
+        setUpdateBusy(false);
+        setUpdateMessage(message);
+        addLog("error", message);
+      }
+    } catch (updateError) {
+      const message = updateError instanceof Error ? updateError.message : "Unable to install update.";
+      setUpdateBusy(false);
+      setUpdateMessage(message);
       addLog("error", message);
     }
   }
@@ -899,6 +991,15 @@ export function App() {
             <button className="ghost slim-button" onClick={() => setShowVersionLog(true)} title="Release update log">
               <History size={16} />
               Release Log
+            </button>
+            <button
+              className={updateReady ? "primary slim-button" : "ghost slim-button"}
+              onClick={() => (updateReady ? void installReadyUpdate() : void checkUpdatesNow())}
+              disabled={updateBusy}
+              title={updateMessage || (updateReady ? "Install downloaded update" : "Check for app updates")}
+            >
+              <RefreshCw size={16} className={updateBusy ? "spinning" : ""} />
+              {updateReady ? "Install Update" : updateBusy ? "Checking..." : "Check Update"}
             </button>
             <button className="ghost slim-button" onClick={() => void refreshAll()} disabled={busy} title="Refresh diagnostics and status">
               <RefreshCw size={16} />
