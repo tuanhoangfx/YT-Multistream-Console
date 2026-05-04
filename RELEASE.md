@@ -2,6 +2,31 @@
 
 Release and distribution process for `YT Multistream Console`.
 
+## 2026-05-04 - Project Update 0.1.15
+
+- Version: `0.1.15`
+- Timestamp: 2026-05-04 23:24 (UTC+7)
+- Commit: `3bb3bed`
+- Type: Maintenance/Docs
+- Status: Verified
+
+### Changes
+
+- Updated source version to `0.1.15` and synced release metadata.
+- Updated `package.json`.
+- Updated `tool.manifest.json`.
+
+
+### Verification
+
+```powershell
+pnpm sync:all
+pnpm build
+```
+
+Result: passed.
+
+
 ## 2026-05-03 - Code Update 0.1.14
 
 - Version: `0.1.14`

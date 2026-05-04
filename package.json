@@ -1,6 +1,6 @@
 {
   "name": "yt-multistream-console",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "private": true,
   "description": "Desktop console for multi-channel YouTube livestream from local or Google Drive source.",
   "author": "YT Multistream Console",
@@ -49,7 +49,6 @@
     "@vitejs/plugin-react": "^5.1.1",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
-    "electron": "^39.2.7",
     "lucide-react": "^0.561.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
@@ -60,6 +59,7 @@
     "@eslint/js": "^10.0.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "electron": "^39.2.7",
     "electron-builder": "^26.8.1",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
