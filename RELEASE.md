@@ -2,6 +2,34 @@
 
 Release and distribution process for `YT Multistream Console`.
 
+## 2026-05-05 - Code Update 0.1.26
+
+- Version: `0.1.26`
+- Timestamp: 2026-05-05 15:26 (UTC+7)
+- Commit: `aa77f16`
+- Type: Feature/Fix
+- Status: Verified
+
+### Changes
+
+- Updated source version to `0.1.26` and synced release metadata.
+- Updated `electron/main.cjs`.
+- Updated `src/App.tsx`.
+- Updated `src/components/GroupApplyDropdown.tsx`.
+- Updated `src/features/drive/drive-utils.test.ts`.
+- Updated `src/features/drive/drive-utils.ts`.
+- Additional updated files: +2.
+
+### Verification
+
+```powershell
+pnpm sync:all
+pnpm build
+```
+
+Result: passed.
+
+
 ## 2026-05-05 - Code Update 0.1.25
 
 - Version: `0.1.25`

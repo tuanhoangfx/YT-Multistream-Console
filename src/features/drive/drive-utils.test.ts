@@ -90,7 +90,8 @@ describe("drive utils", () => {
   it("derives metadata status correctly", () => {
     expect(deriveMetadataStatus({ metadataStatus: "pending", metadataChecked: false })).toBe("pending");
     expect(deriveMetadataStatus({ duration: "00:10:00", resolution: "1920x1080", metadataChecked: true })).toBe("ready");
-    expect(deriveMetadataStatus({ name: "Video 1", metadataChecked: true })).toBe("partial");
-    expect(deriveMetadataStatus({ metadataStatus: "error", metadataChecked: true })).toBe("pending");
+    expect(deriveMetadataStatus({ duration: "00:10:00", metadataChecked: true })).toBe("partial");
+    expect(deriveMetadataStatus({ name: "Video 1", size: "2.4 KB", metadataChecked: true })).toBe("error");
+    expect(deriveMetadataStatus({ metadataStatus: "error", metadataChecked: true })).toBe("error");
   });
 });

@@ -57,8 +57,6 @@ export function useDriveMetadataScanner({
           const size = metadata.size || item.size;
           const hasDuration = hasDriveValue(duration);
           const hasResolution = hasDriveValue(resolution);
-          const hasSize = hasDriveValue(size);
-          const hasName = Boolean(metadata.name && metadata.name !== "Drive video");
           const shouldDeferDeepProbe = probeMode === "quick" && !(hasDuration && hasResolution);
           if (shouldDeferDeepProbe) {
             setDriveLibrary((items) =>
@@ -80,7 +78,7 @@ export function useDriveMetadataScanner({
             );
             return;
           }
-          const metadataStatus: DriveMetadataStatus = hasDuration && hasResolution ? "ready" : hasName || hasDuration || hasResolution || hasSize ? "partial" : "error";
+          const metadataStatus: DriveMetadataStatus = hasDuration && hasResolution ? "ready" : hasDuration || hasResolution ? "partial" : "error";
 
           setDriveLibrary((items) =>
             items.map((entry) =>
@@ -92,7 +90,13 @@ export function useDriveMetadataScanner({
                     resolution: resolution === "Auto" ? "-" : resolution,
                     size: size === "Auto" ? "-" : size,
                     metadataStatus,
-                    metadataMessage: metadata.message || (metadataStatus === "ready" ? "Metadata generated." : "Only partial metadata was available."),
+                    metadataMessage:
+                      metadata.message ||
+                      (metadataStatus === "ready"
+                        ? "Metadata generated."
+                        : metadataStatus === "partial"
+                          ? "Only partial media metadata was available."
+                          : "Could not read media metadata. Keep link if stream can still start."),
                     metadataChecked: true,
                     metadataProbeMode: probeMode
                   }

@@ -80,19 +80,19 @@ export function hasDriveValue(value: string) {
 }
 
 export function deriveMetadataStatus(item: Partial<DriveLibraryItem>): DriveMetadataStatus {
-  const hasName = Boolean(item.name && item.name !== "Drive video" && !/^Drive video \d+$/i.test(item.name));
   const hasDuration = hasDriveValue(item.duration || "");
   const hasResolution = hasDriveValue(item.resolution || "");
-  const hasSize = hasDriveValue(item.size || "");
   const explicitStatus = item.metadataStatus;
-  if (explicitStatus === "scanning" && (hasName || hasDuration || hasResolution || hasSize)) {
+  if (explicitStatus === "scanning" && (hasDuration || hasResolution)) {
     return hasDuration && hasResolution ? "ready" : "partial";
   }
   if (explicitStatus === "pending" || explicitStatus === "scanning") return "pending";
-  if ((explicitStatus === "ready" || explicitStatus === "partial") && (hasName || hasDuration || hasResolution || hasSize)) return explicitStatus;
-  if (explicitStatus === "error" && (hasName || hasDuration || hasResolution || hasSize)) return "partial";
-  if (explicitStatus === "error") return "pending";
+  if (explicitStatus === "ready" && hasDuration && hasResolution) return "ready";
+  if ((explicitStatus === "ready" || explicitStatus === "partial") && (hasDuration || hasResolution)) {
+    return hasDuration && hasResolution ? "ready" : "partial";
+  }
+  if (explicitStatus === "error") return "error";
   if (hasDuration && hasResolution) return "ready";
-  if (hasName || hasDuration || hasResolution || hasSize) return "partial";
+  if (hasDuration || hasResolution) return "partial";
   return item.metadataChecked ? "error" : "pending";
 }

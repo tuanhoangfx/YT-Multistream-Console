@@ -78,6 +78,16 @@ function DriveLibraryMetadataStatusIcon({ status, spinning }: { status: DriveMet
   return <Clock3 size={13} aria-hidden />;
 }
 
+function GroupDotLabel({ group }: { group?: string }) {
+  const label = group || "-";
+  return (
+    <span className="group-dot-label">
+      <span className={`dropdown-option-dot ${toneFromSeed(`drive-group:${label}`)}`} aria-hidden />
+      <span>{label}</span>
+    </span>
+  );
+}
+
 type Theme = "dark" | "light";
 type View = "streams" | "library";
 
@@ -1643,7 +1653,7 @@ export function App() {
                       </td>
                       <td className="library-td-single-line library-td-group">
                         <span className="library-cell-ellipsis" title={item.group}>
-                          {item.group || "-"}
+                          <GroupDotLabel group={item.group} />
                         </span>
                       </td>
                       <td>
@@ -1912,7 +1922,7 @@ export function App() {
                           </td>
                           <td className="library-td-single-line library-td-group">
                             <span className="library-cell-ellipsis" title={item.group}>
-                              {item.group || "-"}
+                              <GroupDotLabel group={item.group} />
                             </span>
                           </td>
                           <td>
@@ -2030,7 +2040,9 @@ export function App() {
                           setGroupDraft(row.group);
                         }}
                       >
-                        <td>{row.group}</td>
+                        <td>
+                          <GroupDotLabel group={row.group} />
+                        </td>
                         <td>{row.count}</td>
                         <td>{row.updatedAt}</td>
                       </tr>

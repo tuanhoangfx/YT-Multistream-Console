@@ -1,5 +1,6 @@
 import { Check, CheckCheck, ChevronDown, FolderCog, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toneFromSeed } from "../features/streams/dropdown-utils";
 
 type GroupApplyDropdownProps = {
   groups: string[];
@@ -94,9 +95,7 @@ export function GroupApplyDropdown({ groups, selectedRowsCount, onApply, onManag
               >
                 <span className="dropdown-checkbox">{draftGroups.includes(group) ? <Check size={10} /> : null}</span>
                 <span className="dropdown-option-label">
-                  <span className="dropdown-option-icon group">
-                    <FolderCog size={13} />
-                  </span>
+                  <span className={`dropdown-option-dot ${toneFromSeed(`drive-group:${group}`)}`} />
                   {group}
                 </span>
               </button>

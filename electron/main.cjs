@@ -1101,7 +1101,6 @@ function bindStreamingApi() {
     const size = media.size || "-";
     const displayName = media.name || name || driveFileFallbackName(url);
     const hasMetadata = duration !== "-" || resolution !== "-";
-    const hasPartialMetadata = hasMetadata || size !== "-" || Boolean(displayName && displayName !== "Drive video");
     return {
       ok: true,
       name: displayName,
@@ -1111,9 +1110,7 @@ function bindStreamingApi() {
       probeMode,
       message: hasMetadata
         ? probeMode === "deep" ? "Long video metadata generated." : "Metadata generated."
-        : hasPartialMetadata
-          ? `Partial metadata only. ffmpeg output: ${(media.debug || "").replace(/\s+/g, " ").slice(0, 220) || "no media stream details"}`
-          : `Could not read media metadata. ffmpeg output: ${(media.debug || "").replace(/\s+/g, " ").slice(0, 220) || "empty"}`
+        : `Could not read media metadata. ffmpeg output: ${(media.debug || "").replace(/\s+/g, " ").slice(0, 220) || "empty"}`
     };
   });
 

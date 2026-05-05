@@ -2166,6 +2166,21 @@ select:focus {
   text-overflow: ellipsis;
 }
 
+.group-dot-label {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  vertical-align: middle;
+}
+
+.group-dot-label span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .library-actions {
   display: flex;
   align-items: center;
