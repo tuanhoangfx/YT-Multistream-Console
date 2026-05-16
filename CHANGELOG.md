@@ -1,17 +1,19 @@
 # Changelog
 
-## 2026-05-05 - Code Update 0.1.26
+## 2026-05-17 - Automation Update 0.1.27
 
-- Version: `0.1.26`
-- Timestamp: 2026-05-05 15:26 (UTC+7)
-- Commit: `aa77f16`
-- Type: Feature/Fix
+- Version: `0.1.27`
+- Timestamp: 2026-05-17 03:33 (UTC+7)
+- Commit: `68f9a09`
+- Type: Maintenance/Automation
 - Status: Verified
 
 ### Changes
 
-- Updated source version to `0.1.26` and synced release metadata.
-- Drive utilities and multistream UI updates from the latest desktop release.
+- Updated source version to `0.1.27` and synced release metadata.
+- Updated `CHANGELOG.md`.
+- Updated `scripts/sync-changelog.mjs`.
+
 
 ### Verification
 
@@ -20,11 +22,4 @@ pnpm sync:all
 pnpm build
 ```
 
-- Result: passed
-
-### Rollback
-
-```powershell
-cd E:\Dev\Tool\YT-Multistream-Console
-git revert <commit_hash>
-```
+Result: passed.
